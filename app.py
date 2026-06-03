@@ -1,117 +1,117 @@
 #!/usr/bin/env python3
 """
-Keyboard Learning App — Learn to type fast and accurately on multiple layouts.
+Keyboard Learning App — PySide6 Version
+Learn to type fast and accurately on multiple layouts.
 Supports: QWERTY, AZERTY, DVORAK, Colemak
-Platforms: Desktop (Windows/Linux/Mac) and Android
 
 Requirements:
-  pip install kivy plyer
-
-Android Build:
-  buildozer android debug
+  pip install PySide6
 """
 
-import time, random, json, os, sys, math, struct, wave
-from kivy.app import App
-from kivy.uix.screenmanager import ScreenManager, Screen, SlideTransition
-from kivy.uix.boxlayout import BoxLayout
-from kivy.uix.gridlayout import GridLayout
-from kivy.uix.label import Label
-from kivy.uix.button import Button
-from kivy.uix.widget import Widget
-from kivy.uix.scrollview import ScrollView
-from kivy.uix.togglebutton import ToggleButton
-from kivy.uix.textinput import TextInput
-from kivy.clock import Clock
-from kivy.graphics import Color, RoundedRectangle
-from kivy.core.window import Window
-from kivy.properties import (
-    StringProperty, NumericProperty, BooleanProperty, ListProperty
+import sys, os, json, time, random, math, struct, wave
+from datetime import datetime
+
+from PySide6.QtWidgets import (
+    QApplication, QMainWindow, QWidget, QVBoxLayout, QHBoxLayout,
+    QGridLayout, QStackedWidget, QLabel, QPushButton, QRadioButton,
+    QButtonGroup, QScrollArea, QTextEdit, QSizePolicy, QFrame,
+    QCheckBox, QPlainTextEdit, QSpacerItem, QToolButton, QComboBox
 )
-from kivy.metrics import dp, sp
-from kivy.animation import Animation
-from kivy.utils import platform
+from PySide6.QtCore import Qt, QTimer, QRectF, QSize, Signal, QUrl
+from PySide6.QtGui import (
+    QPainter, QColor, QBrush, QPen, QFont, QPalette, QKeySequence
+)
 
-# ─── Platform Detection ───────────────────────────────────────────────────────
-IS_ANDROID = platform == 'android'
-IS_IOS = platform == 'ios'
-IS_MOBILE = IS_ANDROID or IS_IOS
+try:
+    from PySide6.QtMultimedia import QSoundEffect
+    HAS_SOUND = True
+except ImportError:
+    HAS_SOUND = False
 
-HAS_VIBRATOR = False
-if IS_ANDROID:
-    try:
-        from plyer import vibrator
-        HAS_VIBRATOR = True
-    except ImportError:
-        pass
-
-# ─── Responsive Sizing ────────────────────────────────────────────────────────
-def _sw():
-    """Scale factor based on screen width."""
-    w = Window.width if Window.width else 800
-    if w < 500: return 0.85
-    if w < 800: return 0.95
-    return 1.0
-
-def key_h():   return dp(48 if IS_MOBILE else 42) * _sw()
-def key_fs(l): return sp(13 if len(l) <= 2 else 10) * _sw()
-def btn_h():   return dp(52 if IS_MOBILE else 48)
-def typing_h():return dp(160 if IS_MOBILE else 150)
+# ─── Data Directory ───────────────────────────────────────────────────────────
+DATA_DIR = os.path.join(os.path.expanduser('~'), '.keyboard_trainer_pyside6')
+os.makedirs(DATA_DIR, exist_ok=True)
 
 # ─── Theme System ─────────────────────────────────────────────────────────────
 THEMES = {
     'dark': {
-        'BG':(0.08,0.08,0.12,1), 'CARD':(0.14,0.15,0.20,1),
-        'CARD2':(0.20,0.21,0.27,1), 'CARD3':(0.25,0.26,0.32,1),
-        'ACCENT':(0.28,0.56,1.0,1), 'GREEN':(0.22,0.88,0.42,1),
-        'RED':(0.92,0.26,0.26,1), 'YELLOW':(1.0,0.86,0.20,1),
-        'ORANGE':(1.0,0.55,0.15,1), 'TXT':(0.93,0.93,0.97,1),
-        'DIM':(0.44,0.44,0.52,1),
+        'BG': (0.08, 0.08, 0.12), 'CARD': (0.14, 0.15, 0.20),
+        'CARD2': (0.20, 0.21, 0.27), 'CARD3': (0.25, 0.26, 0.32),
+        'ACCENT': (0.28, 0.56, 1.0), 'GREEN': (0.22, 0.88, 0.42),
+        'RED': (0.92, 0.26, 0.26), 'YELLOW': (1.0, 0.86, 0.20),
+        'ORANGE': (1.0, 0.55, 0.15), 'TXT': (0.93, 0.93, 0.97),
+        'DIM': (0.44, 0.44, 0.52),
     },
     'midnight': {
-        'BG':(0.04,0.04,0.09,1), 'CARD':(0.09,0.10,0.17,1),
-        'CARD2':(0.15,0.16,0.23,1), 'CARD3':(0.20,0.22,0.30,1),
-        'ACCENT':(0.45,0.45,1.0,1), 'GREEN':(0.20,0.90,0.60,1),
-        'RED':(0.95,0.20,0.30,1), 'YELLOW':(1.0,0.90,0.30,1),
-        'ORANGE':(1.0,0.60,0.20,1), 'TXT':(0.90,0.90,0.98,1),
-        'DIM':(0.40,0.40,0.55,1),
+        'BG': (0.04, 0.04, 0.09), 'CARD': (0.09, 0.10, 0.17),
+        'CARD2': (0.15, 0.16, 0.23), 'CARD3': (0.20, 0.22, 0.30),
+        'ACCENT': (0.45, 0.45, 1.0), 'GREEN': (0.20, 0.90, 0.60),
+        'RED': (0.95, 0.20, 0.30), 'YELLOW': (1.0, 0.90, 0.30),
+        'ORANGE': (1.0, 0.60, 0.20), 'TXT': (0.90, 0.90, 0.98),
+        'DIM': (0.40, 0.40, 0.55),
     },
     'ocean': {
-        'BG':(0.04,0.07,0.12,1), 'CARD':(0.08,0.13,0.20,1),
-        'CARD2':(0.12,0.18,0.28,1), 'CARD3':(0.16,0.24,0.34,1),
-        'ACCENT':(0.15,0.75,0.90,1), 'GREEN':(0.20,0.85,0.65,1),
-        'RED':(0.90,0.30,0.35,1), 'YELLOW':(0.95,0.88,0.25,1),
-        'ORANGE':(0.95,0.60,0.20,1), 'TXT':(0.92,0.95,0.98,1),
-        'DIM':(0.35,0.45,0.55,1),
+        'BG': (0.04, 0.07, 0.12), 'CARD': (0.08, 0.13, 0.20),
+        'CARD2': (0.12, 0.18, 0.28), 'CARD3': (0.16, 0.24, 0.34),
+        'ACCENT': (0.15, 0.75, 0.90), 'GREEN': (0.20, 0.85, 0.65),
+        'RED': (0.90, 0.30, 0.35), 'YELLOW': (0.95, 0.88, 0.25),
+        'ORANGE': (0.95, 0.60, 0.20), 'TXT': (0.92, 0.95, 0.98),
+        'DIM': (0.35, 0.45, 0.55),
     },
     'warm': {
-        'BG':(0.12,0.08,0.06,1), 'CARD':(0.18,0.14,0.10,1),
-        'CARD2':(0.24,0.20,0.16,1), 'CARD3':(0.30,0.26,0.22,1),
-        'ACCENT':(0.95,0.65,0.25,1), 'GREEN':(0.45,0.85,0.35,1),
-        'RED':(0.90,0.30,0.25,1), 'YELLOW':(0.98,0.88,0.25,1),
-        'ORANGE':(0.95,0.55,0.20,1), 'TXT':(0.95,0.92,0.88,1),
-        'DIM':(0.50,0.42,0.36,1),
+        'BG': (0.12, 0.08, 0.06), 'CARD': (0.18, 0.14, 0.10),
+        'CARD2': (0.24, 0.20, 0.16), 'CARD3': (0.30, 0.26, 0.22),
+        'ACCENT': (0.95, 0.65, 0.25), 'GREEN': (0.45, 0.85, 0.35),
+        'RED': (0.90, 0.30, 0.25), 'YELLOW': (0.98, 0.88, 0.25),
+        'ORANGE': (0.95, 0.55, 0.20), 'TXT': (0.95, 0.92, 0.88),
+        'DIM': (0.50, 0.42, 0.36),
+    },
+    'light': {
+        'BG': (0.94, 0.94, 0.96), 'CARD': (1.0, 1.0, 1.0),
+        'CARD2': (0.92, 0.92, 0.94), 'CARD3': (0.86, 0.86, 0.88),
+        'ACCENT': (0.18, 0.45, 0.92), 'GREEN': (0.13, 0.72, 0.30),
+        'RED': (0.85, 0.18, 0.18), 'YELLOW': (0.85, 0.72, 0.05),
+        'ORANGE': (0.90, 0.48, 0.10), 'TXT': (0.12, 0.12, 0.15),
+        'DIM': (0.50, 0.50, 0.55),
     },
 }
 
 _theme_name = 'dark'
 
+def rgb_hex(r, g, b):
+    return f'#{int(r*255):02x}{int(g*255):02x}{int(b*255):02x}'
+
 def T(key):
-    return THEMES[_theme_name].get(key, (0.5,0.5,0.5,1))
+    vals = THEMES[_theme_name].get(key, (0.5, 0.5, 0.5))
+    return rgb_hex(*vals)
+
+def T_color(key):
+    vals = THEMES[_theme_name].get(key, (0.5, 0.5, 0.5))
+    return QColor(int(vals[0]*255), int(vals[1]*255), int(vals[2]*255))
+
+def T_rgba(key, alpha=255):
+    vals = THEMES[_theme_name].get(key, (0.5, 0.5, 0.5))
+    return QColor(int(vals[0]*255), int(vals[1]*255), int(vals[2]*255), alpha)
 
 def set_theme(name):
     global _theme_name
     if name in THEMES:
         _theme_name = name
 
+THEME_DISPLAY = {
+    'dark': '🌙  Dark', 'midnight': '🌃  Midnight',
+    'ocean': '🌊  Ocean', 'warm': '🔥  Warm', 'light': '☀️  Light',
+}
+
+# Finger color assignments for visual keyboard
 FINGER_COLS = [
-    (0.85,0.30,0.30),(0.90,0.55,0.20),(0.88,0.82,0.22),(0.28,0.78,0.32),
-    (0.20,0.76,0.82),(0.30,0.46,0.92),(0.58,0.30,0.82),(0.82,0.30,0.70),
-    (0.50,0.50,0.56),
+    (0.85, 0.30, 0.30), (0.90, 0.55, 0.20), (0.88, 0.82, 0.22), (0.28, 0.78, 0.32),
+    (0.20, 0.76, 0.82), (0.30, 0.46, 0.92), (0.58, 0.30, 0.82), (0.82, 0.30, 0.70),
+    (0.50, 0.50, 0.56),
 ]
 FINGER_NAMES = [
-    "Left Pinky","Left Ring","Left Middle","Left Index",
-    "Right Index","Right Middle","Right Ring","Right Pinky","Thumb"
+    "Left Pinky", "Left Ring", "Left Middle", "Left Index",
+    "Right Index", "Right Middle", "Right Ring", "Right Pinky", "Thumb"
 ]
 
 # ─── Sound System ─────────────────────────────────────────────────────────────
@@ -119,7 +119,7 @@ def _gen_wav(path, freq=800, dur=0.04, vol=0.2):
     sr = 22050; n = int(sr * dur); frames = []
     for i in range(n):
         fade = 1.0 - (i / n)
-        v = int(vol * 32767 * math.sin(2*math.pi*freq*i/sr) * fade)
+        v = int(vol * 32767 * math.sin(2 * math.pi * freq * i / sr) * fade)
         frames.append(struct.pack('<h', max(-32768, min(32767, v))))
     with wave.open(path, 'wb') as wf:
         wf.setnchannels(1); wf.setsampwidth(2); wf.setframerate(sr)
@@ -127,64 +127,52 @@ def _gen_wav(path, freq=800, dur=0.04, vol=0.2):
 
 class SoundManager:
     def __init__(self):
-        self.enabled = True
-        self.sounds = {}
-        self._ready = False
+        self.enabled = True; self.sounds = {}; self._ready = False
 
     def init(self, data_dir):
+        if not HAS_SOUND: return
         try:
-            from kivy.core.audio import SoundLoader
             sd = os.path.join(data_dir, 'sounds')
             os.makedirs(sd, exist_ok=True)
-            for name, freq, dur in [('click',880,0.035),('error',280,0.07),('done',1100,0.12)]:
+            for name, freq, dur in [
+                ('click', 880, 0.035), ('error', 280, 0.07),
+                ('done', 1100, 0.12), ('streak', 1200, 0.06),
+            ]:
                 p = os.path.join(sd, f'{name}.wav')
-                if not os.path.exists(p):
-                    _gen_wav(p, freq, dur, 0.18)
-                s = SoundLoader.load(p)
-                if s:
-                    s.volume = 0.5
-                    self.sounds[name] = s
+                if not os.path.exists(p): _gen_wav(p, freq, dur, 0.18)
+                effect = QSoundEffect()
+                effect.setSource(QUrl.fromLocalFile(os.path.abspath(p)))
+                effect.setVolume(0.5)
+                self.sounds[name] = effect
             self._ready = True
         except Exception as e:
             print(f"Sound init skipped: {e}")
 
     def play(self, name):
-        if not self.enabled or not self._ready or name not in self.sounds:
-            return
-        try:
-            s = self.sounds[name]
-            if s:
-                s.stop(); s.play()
+        if not self.enabled or not self._ready or name not in self.sounds: return
+        try: self.sounds[name].play()
         except: pass
 
 sound_mgr = SoundManager()
-
-def vibrate(ms=30):
-    if HAS_VIBRATOR:
-        try: vibrator.vibrate(time=ms/1000.0)
-        except: pass
 
 # ─── Settings Manager ─────────────────────────────────────────────────────────
 DEFAULT_SETTINGS = {
     'layout': 'QWERTY', 'lesson': 'home_row', 'theme': 'dark',
     'sound': True, 'vibration': True, 'mode': 'completion', 'timer_secs': 60,
+    'show_keyboard': True, 'show_finger_hints': True, 'difficulty': 'normal',
 }
 
 class SettingsManager:
     def __init__(self):
-        self.data = dict(DEFAULT_SETTINGS)
-        self._path = None
+        self.data = dict(DEFAULT_SETTINGS); self._path = None
 
     def init(self, data_dir):
-        self._path = os.path.join(data_dir, 'kb_settings.json')
-        self.load()
+        self._path = os.path.join(data_dir, 'kb_settings.json'); self.load()
 
     def load(self):
         if self._path and os.path.exists(self._path):
             try:
-                with open(self._path, 'r') as f:
-                    saved = json.load(f)
-                    self.data.update(saved)
+                with open(self._path, 'r') as f: saved = json.load(f); self.data.update(saved)
             except: pass
         set_theme(self.data.get('theme', 'dark'))
         sound_mgr.enabled = self.data.get('sound', True)
@@ -192,20 +180,81 @@ class SettingsManager:
     def save(self):
         if self._path:
             try:
-                with open(self._path, 'w') as f:
-                    json.dump(self.data, f)
+                with open(self._path, 'w') as f: json.dump(self.data, f, indent=2)
             except: pass
 
-    def get(self, key, default=None):
-        return self.data.get(key, default)
+    def get(self, key, default=None): return self.data.get(key, default)
 
     def set(self, key, value):
-        self.data[key] = value
-        self.save()
+        self.data[key] = value; self.save()
         if key == 'theme': set_theme(value)
         if key == 'sound': sound_mgr.enabled = value
 
 settings_mgr = SettingsManager()
+
+# ─── Stats Manager ────────────────────────────────────────────────────────────
+class StatsManager:
+    def __init__(self, data_dir):
+        self._path = os.path.join(data_dir, 'kb_stats.json')
+        self.stats = []; self.key_stats = {}  # per-key accuracy
+        self.load()
+
+    def load(self):
+        if os.path.exists(self._path):
+            try:
+                with open(self._path, 'r') as f:
+                    data = json.load(f)
+                    self.stats = data if isinstance(data, list) else data.get('sessions', [])
+                    self.key_stats = data.get('key_stats', {}) if isinstance(data, dict) else {}
+            except: self.stats = []; self.key_stats = {}
+
+    def save(self):
+        try:
+            with open(self._path, 'w') as f:
+                json.dump({'sessions': self.stats, 'key_stats': self.key_stats}, f, indent=2)
+        except: pass
+
+    def add_stat(self, layout, lesson, wpm, acc, elapsed, key_errors=None):
+        self.stats.append({
+            'layout': layout, 'lesson': lesson, 'wpm': round(wpm, 1),
+            'acc': round(acc, 1), 'time': round(elapsed, 1),
+            'date': datetime.now().strftime('%Y-%m-%d %H:%M'),
+        })
+        # Update per-key stats
+        if key_errors:
+            for key, count in key_errors.items():
+                k = f"{layout}:{key}"
+                if k not in self.key_stats:
+                    self.key_stats[k] = {'errors': 0, 'total': 0}
+                self.key_stats[k]['errors'] += count
+                self.key_stats[k]['total'] += count  # will add correct below
+        self.save()
+
+    def record_key(self, layout, key_char, correct):
+        k = f"{layout}:{key_char.upper()}"
+        if k not in self.key_stats:
+            self.key_stats[k] = {'errors': 0, 'total': 0}
+        self.key_stats[k]['total'] += 1
+        if not correct:
+            self.key_stats[k]['errors'] += 1
+        # Save periodically (every 50 keystrokes to reduce I/O)
+        if self.key_stats[k]['total'] % 50 == 0:
+            self.save()
+
+    def get_key_accuracy(self, layout, key_char):
+        k = f"{layout}:{key_char.upper()}"
+        info = self.key_stats.get(k, {'errors': 0, 'total': 0})
+        if info['total'] == 0: return 1.0
+        return 1.0 - (info['errors'] / info['total'])
+
+    def get_best(self, layout):
+        ls = [s for s in self.stats if s.get('layout') == layout]
+        return max(ls, key=lambda s: s.get('wpm', 0)) if ls else None
+
+    def get_recent(self, n=10):
+        return self.stats[-n:] if self.stats else []
+
+    def clear(self): self.stats = []; self.key_stats = {}; self.save()
 
 # ─── Keyboard Layouts ─────────────────────────────────────────────────────────
 LAYOUTS = {
@@ -220,6 +269,13 @@ LAYOUTS = {
         ],
         'offsets': [0, 0.25, 0.5, 0.75, 2.5],
         'home_keys': ['F','D','S','A','J','K','L',';'],
+        # Explicit finger mapping: col_index -> finger (0-7)
+        'finger_map': {
+            0: [0,0,2,3,3,4,4,5,6,7,7,7,7],   # number row
+            1: [0,0,2,3,3,4,4,5,6,7,7,7,7],    # top row
+            2: [0,1,2,3,3,4,4,5,6,7,7],         # home row
+            3: [0,0,1,2,3,3,4,5,6,7,7,7],       # bottom row (first col=shift)
+        },
     },
     'AZERTY': {
         'display': 'AZERTY (French)',
@@ -232,6 +288,12 @@ LAYOUTS = {
         ],
         'offsets': [0, 0.25, 0.5, 0.75, 2.5],
         'home_keys': ['F','D','S','Q','J','K','L','M'],
+        'finger_map': {
+            0: [0,0,2,3,3,4,4,5,6,7,7,7,7],
+            1: [0,0,2,3,3,4,4,5,6,7,7,7,7],
+            2: [0,1,2,3,3,4,4,5,6,7,7],
+            3: [0,0,1,2,3,3,4,5,6,7,7,7],
+        },
     },
     'DVORAK': {
         'display': 'DVORAK (Ergonomic)',
@@ -244,6 +306,12 @@ LAYOUTS = {
         ],
         'offsets': [0, 0.25, 0.5, 0.75, 2.5],
         'home_keys': ['E','U','I','A','H','T','N','S'],
+        'finger_map': {
+            0: [0,0,2,3,3,4,4,5,6,7,7,7,7],
+            1: [0,0,2,3,3,4,4,5,6,7,7],
+            2: [0,1,2,3,3,4,4,5,6,7,7],
+            3: [0,0,1,2,3,3,4,5,6,7,7,7],
+        },
     },
     'COLEMAK': {
         'display': 'Colemak (Modern)',
@@ -256,16 +324,29 @@ LAYOUTS = {
         ],
         'offsets': [0, 0.25, 0.5, 0.75, 2.5],
         'home_keys': ['T','S','R','A','N','E','I','O'],
+        'finger_map': {
+            0: [0,0,2,3,3,4,4,5,6,7,7,7,7],
+            1: [0,0,2,3,3,4,4,5,6,7,7,7,7],
+            2: [0,1,2,3,3,4,4,5,6,7,7],
+            3: [0,0,1,2,3,3,4,5,6,7,7,7],
+        },
     },
 }
 
 def get_finger(layout_name, key_char):
+    """Return finger index (0-8) for a given key character using layout-specific mapping."""
     if key_char in (' ', 'SPACE'): return 8
     layout = LAYOUTS[layout_name]
     ku = key_char.upper()
-    for row in layout['rows']:
+    finger_map = layout.get('finger_map', {})
+    for ri, row in enumerate(layout['rows']):
+        if ri == 4: continue  # skip space row
         for ci, (lbl, _) in enumerate(row):
             if lbl.upper() == ku or lbl == key_char:
+                row_map = finger_map.get(ri)
+                if row_map and ci < len(row_map):
+                    return row_map[ci]
+                # Fallback
                 if ci <= 0: return 0
                 if ci == 1: return 1
                 if ci == 2: return 2
@@ -280,8 +361,7 @@ def find_key_label(layout_name, char):
     if char == ' ': return 'SPACE'
     for row in LAYOUTS[layout_name]['rows']:
         for lbl, _ in row:
-            if lbl == char or lbl.lower() == char or lbl.upper() == char:
-                return lbl
+            if lbl == char or lbl.lower() == char or lbl.upper() == char: return lbl
     return None
 
 # ─── Lesson Generation ────────────────────────────────────────────────────────
@@ -299,6 +379,8 @@ WORDS = [
     "still","world","long","right","small","part","through","each","much",
     "before","line","end","turn","move","play","run","read","write","learn",
     "type","fast","key","home","row","top","bottom","finger","practice",
+    "code","data","system","program","input","output","screen","file","open",
+    "close","save","print","search","find","next","page","view","edit","help",
 ]
 SENTENCES = [
     "The quick brown fox jumps over the lazy dog.",
@@ -316,488 +398,719 @@ SENTENCES = [
     "Good posture helps you type faster and avoid strain.",
     "Take short breaks to rest your hands and eyes.",
     "Consistent daily practice leads to rapid improvement.",
+    "Programming requires a lot of typing every single day.",
+    "The best coders can type over eighty words per minute.",
+    "Focus on accuracy first then gradually increase your speed.",
+    "Repetition builds muscle memory for each key on the board.",
+    "Never look down at your hands while you are typing.",
 ]
+
+def _no_triple_repeat(text):
+    """Ensure no character appears three times consecutively."""
+    result = list(text)
+    for i in range(2, len(result)):
+        if result[i] == result[i-1] == result[i-2]:
+            result[i] = ' '
+    return ''.join(result)
 
 def gen_lesson(layout_name, lesson_type, length=140):
     layout = LAYOUTS[layout_name]
-    if lesson_type == 'custom':
-        return ''
+    if lesson_type == 'custom': return ''
     if lesson_type == 'home_row':
         keys = [k.lower() for k in layout['home_keys']]
-        t = ''.join(random.choice(keys) + (' ' if random.random()<0.18 else '') for _ in range(length))
-        return t.strip()
+        # Generate with natural word-like patterns
+        result = []
+        for _ in range(length):
+            if random.random() < 0.15 and result and result[-1] != ' ':
+                result.append(' ')
+            else:
+                result.append(random.choice(keys))
+        text = _no_triple_repeat(''.join(result).strip())
+        return text
     if lesson_type == 'top_row':
-        keys = [lbl.lower() for lbl,_ in layout['rows'][1] if len(lbl)==1 and lbl.isalpha()]
-        t = ''.join(random.choice(keys) + (' ' if random.random()<0.18 else '') for _ in range(length))
-        return t.strip()
+        keys = [lbl.lower() for lbl, _ in layout['rows'][1] if len(lbl) == 1 and lbl.isalpha()]
+        result = []
+        for _ in range(length):
+            if random.random() < 0.18 and result and result[-1] != ' ':
+                result.append(' ')
+            else:
+                result.append(random.choice(keys))
+        return _no_triple_repeat(''.join(result).strip())
     if lesson_type == 'bottom_row':
-        keys = [lbl.lower() for lbl,_ in layout['rows'][3] if len(lbl)==1 and lbl.isalpha()]
-        t = ''.join(random.choice(keys) + (' ' if random.random()<0.18 else '') for _ in range(length))
-        return t.strip()
+        keys = [lbl.lower() for lbl, _ in layout['rows'][3] if len(lbl) == 1 and lbl.isalpha()]
+        result = []
+        for _ in range(length):
+            if random.random() < 0.18 and result and result[-1] != ' ':
+                result.append(' ')
+            else:
+                result.append(random.choice(keys))
+        return _no_triple_repeat(''.join(result).strip())
     if lesson_type == 'all_letters':
         keys = []
         for row in layout['rows'][1:4]:
-            keys += [lbl.lower() for lbl,_ in row if len(lbl)==1 and lbl.isalpha()]
-        t = ''.join(random.choice(keys) + (' ' if random.random()<0.18 else '') for _ in range(length))
-        return t.strip()
+            keys += [lbl.lower() for lbl, _ in row if len(lbl) == 1 and lbl.isalpha()]
+        result = []
+        for _ in range(length):
+            if random.random() < 0.18 and result and result[-1] != ' ':
+                result.append(' ')
+            else:
+                result.append(random.choice(keys))
+        return _no_triple_repeat(''.join(result).strip())
     if lesson_type == 'common_words':
-        return ' '.join(random.choices(WORDS, k=24))
+        chosen = random.choices(WORDS, k=max(20, length // 5))
+        return ' '.join(chosen)
     if lesson_type == 'sentences':
-        return ' '.join(random.sample(SENTENCES, min(3, len(SENTENCES))))
+        count = min(3, len(SENTENCES))
+        selected = random.sample(SENTENCES, count)
+        return ' '.join(selected)
     if lesson_type == 'numbers':
-        keys = [lbl for lbl,_ in layout['rows'][0] if len(lbl)==1]
-        t = ''.join(random.choice(keys) + (' ' if random.random()<0.15 else '') for _ in range(length))
-        return t.strip()
+        keys = [lbl for lbl, _ in layout['rows'][0] if len(lbl) == 1]
+        result = []
+        for _ in range(length):
+            if random.random() < 0.15 and result and result[-1] != ' ':
+                result.append(' ')
+            else:
+                result.append(random.choice(keys))
+        return _no_triple_repeat(''.join(result).strip())
+    if lesson_type == 'progressive':
+        # Start with home row, gradually add more keys
+        keys = [k.lower() for k in layout['home_keys']]
+        all_keys = []
+        for row in layout['rows'][1:4]:
+            all_keys += [lbl.lower() for lbl, _ in row if len(lbl) == 1 and lbl.isalpha()]
+        result = []
+        for i in range(length):
+            # Gradually increase the pool of keys
+            pool_size = min(len(all_keys), 4 + int(i / length * (len(all_keys) - 4)))
+            pool = keys + all_keys[:pool_size - len(keys)]
+            if not pool: pool = keys
+            if random.random() < 0.20 and result and result[-1] != ' ':
+                result.append(' ')
+            else:
+                result.append(random.choice(pool))
+        return _no_triple_repeat(''.join(result).strip())
     return gen_lesson(layout_name, 'common_words', length)
 
 LESSON_TYPES = [
-    ('home_row',    '🏠  Home Row',     'Master the home row keys'),
-    ('top_row',     '⬆️  Top Row',      'Practice the top letter row'),
-    ('bottom_row',  '⬇️  Bottom Row',   'Practice the bottom letter row'),
-    ('all_letters', '🔤  All Letters',   'All letter keys combined'),
-    ('common_words','📝  Common Words',  'Frequently used English words'),
-    ('sentences',   '📖  Sentences',     'Full sentences for real practice'),
-    ('numbers',     '🔢  Numbers & Sym', 'Number row and punctuation'),
+    ('home_row', '🏠  Home Row', 'Master the home row keys'),
+    ('top_row', '⬆️  Top Row', 'Practice the top letter row'),
+    ('bottom_row', '⬇️  Bottom Row', 'Practice the bottom letter row'),
+    ('all_letters', '🔤  All Letters', 'All letter keys combined'),
+    ('progressive', '📈  Progressive', 'Start easy, gradually add keys'),
+    ('common_words', '📝  Common Words', 'Frequently used English words'),
+    ('sentences', '📖  Sentences', 'Full sentences for real practice'),
+    ('numbers', '🔢  Numbers & Sym', 'Number row and punctuation'),
 ]
 
 PRACTICE_MODES = [
     ('completion', '📝  Completion', 'Type the full text'),
-    ('timed_30',   '⏱  30 Seconds',  'Speed test — 30s'),
-    ('timed_60',   '⏱  60 Seconds',  'Speed test — 60s'),
-    ('timed_120',  '⏱  2 Minutes',   'Speed test — 120s'),
+    ('timed_30', '⏱  30 Seconds', 'Speed test — 30s'),
+    ('timed_60', '⏱  60 Seconds', 'Speed test — 60s'),
+    ('timed_120', '⏱  2 Minutes', 'Speed test — 120s'),
 ]
+
+# ─── Global Stylesheet ────────────────────────────────────────────────────────
+def get_app_stylesheet():
+    return f"""
+    QMainWindow {{ background-color: {T('BG')}; }}
+    QWidget {{ background-color: {T('BG')}; color: {T('TXT')}; }}
+    QLabel {{ background: transparent; color: {T('TXT')}; }}
+    QScrollArea {{ border: none; background: transparent; }}
+    QScrollBar:vertical {{
+        background: {T('CARD')}; width: 8px; border-radius: 4px;
+    }}
+    QScrollBar::handle:vertical {{
+        background: {T('CARD3')}; border-radius: 4px; min-height: 30px;
+    }}
+    QScrollBar::add-line:vertical, QScrollBar::sub-line:vertical {{ height: 0; }}
+    QTextEdit {{
+        background-color: {T('CARD')}; color: {T('TXT')};
+        border: none; border-radius: 10px; padding: 10px;
+        selection-background-color: {T('ACCENT')};
+    }}
+    QPlainTextEdit {{
+        background-color: {T('CARD')}; color: {T('TXT')};
+        border: 1px solid {T('CARD3')}; border-radius: 8px; padding: 8px;
+    }}
+    QCheckBox {{ color: {T('TXT')}; spacing: 8px; background: transparent; }}
+    QCheckBox::indicator {{
+        width: 20px; height: 20px; border-radius: 4px;
+        border: 2px solid {T('CARD3')}; background: {T('CARD2')};
+    }}
+    QCheckBox::indicator:checked {{
+        background: {T('ACCENT')}; border-color: {T('ACCENT')};
+    }}
+    QComboBox {{
+        background-color: {T('CARD2')}; color: {T('TXT')};
+        border: 1px solid {T('CARD3')}; border-radius: 6px;
+        padding: 6px 12px; min-height: 28px;
+    }}
+    QComboBox::drop-down {{ border: none; width: 24px; }}
+    QComboBox QAbstractItemView {{
+        background-color: {T('CARD2')}; color: {T('TXT')};
+        border: 1px solid {T('CARD3')}; selection-background-color: {T('ACCENT')};
+    }}
+    """
+
+def btn_stylesheet(color_key='CARD2', font_size=13, bold=False, radius=6, text_color=None):
+    tc = text_color or T('TXT')
+    fw = 'bold' if bold else 'normal'
+    hover = T('CARD3') if color_key in ('CARD2', 'CARD') else T(color_key)
+    return f"""
+    QPushButton {{
+        background-color: {T(color_key)}; color: {tc};
+        border: none; border-radius: {radius}px;
+        padding: 8px 16px; font-size: {font_size}px; font-weight: {fw};
+    }}
+    QPushButton:hover {{ background-color: {hover}; }}
+    QPushButton:pressed {{ background-color: {T('ACCENT')}; }}
+    """
+
+def toggle_stylesheet(selected=False, font_size=11):
+    bg = T('ACCENT') if selected else T('CARD2')
+    tc = '#ffffff' if selected else T('TXT')
+    return f"""
+    QPushButton {{
+        background-color: {bg}; color: {tc};
+        border: none; border-radius: 6px;
+        padding: 8px 10px; font-size: {font_size}px; font-weight: bold;
+    }}
+    QPushButton:hover {{ background-color: {T('CARD3') if not selected else T('ACCENT')}; }}
+    """
+
+def card_stylesheet(radius=8):
+    return f"background-color: {T('CARD')}; border-radius: {radius}px;"
 
 # ─── Custom Widgets ───────────────────────────────────────────────────────────
 
-class KeyWidget(Button):
-    key_label = StringProperty('')
-    finger_idx = NumericProperty(0)
-    is_home = BooleanProperty(False)
-    highlighted = BooleanProperty(False)
-    pressed_anim = BooleanProperty(False)
+class ProgressBar(QWidget):
+    def __init__(self, parent=None):
+        super().__init__(parent)
+        self.setFixedHeight(6); self._value = 0.0; self._color_key = 'GREEN'
 
-    def __init__(self, key_label='', width_units=1, finger_idx=0, is_home=False, on_tap=None, **kw):
-        self._on_tap = on_tap
-        self.width_units = width_units
-        super().__init__(**kw)
-        self.key_label = key_label
-        self.finger_idx = finger_idx
-        self.is_home = is_home
-        self.size_hint_x = width_units
-        self.size_hint_y = None
-        self.height = key_h()
-        self.background_normal = ''
-        self.background_down = ''
-        self.always_release = True
-        self.halign = 'center'
-        self.valign = 'middle'
-        display = key_label if key_label != 'SPACE' else '⎵ SPACE'
-        self.text = display
-        self.font_size = key_fs(display)
-        self._update_color()
+    def set_value(self, value, color_key='GREEN'):
+        self._value = max(0.0, min(1.0, value)); self._color_key = color_key; self.update()
 
-    def _update_color(self):
-        if self.highlighted:
-            self.background_color = (*T('YELLOW')[:3], 0.92)
-            self.color = (0.1, 0.1, 0.15, 1)
-        elif self.pressed_anim:
-            self.background_color = (*T('ACCENT')[:3], 0.85)
-            self.color = T('TXT')
-        else:
-            fc = FINGER_COLS[self.finger_idx] if 0 <= self.finger_idx < 9 else (0.3,0.3,0.4)
-            self.background_color = (*fc, 0.45)
-            self.color = T('TXT')
-        self.canvas.after.clear()
-        if self.is_home and not self.highlighted:
-            with self.canvas.after:
-                Color(1,1,1,0.6)
-                RoundedRectangle(pos=(self.center_x-dp(6), self.y+dp(4)),
-                                 size=(dp(12),dp(3)), radius=[dp(1.5)])
-
-    def set_highlighted(self, val):
-        self.highlighted = val; self._update_color()
-
-    def flash_press(self):
-        self.pressed_anim = True; self._update_color()
-        Clock.schedule_once(lambda dt: self._unflash(), 0.10)
-
-    def _unflash(self):
-        self.pressed_anim = False; self._update_color()
-
-    def on_press(self):
-        if self._on_tap: self._on_tap(self.key_label)
-
-    def on_highlighted(self, *a): self._update_color()
+    def paintEvent(self, event):
+        p = QPainter(self); p.setRenderHint(QPainter.Antialiasing)
+        p.setBrush(QBrush(T_color('CARD3'))); p.setPen(Qt.NoPen)
+        p.drawRoundedRect(self.rect(), 3, 3)
+        fw = self.width() * self._value
+        if fw > 0:
+            p.setBrush(QBrush(T_color(self._color_key)))
+            p.drawRoundedRect(QRectF(0, 0, fw, self.height()), 3, 3)
 
 
-class VisualKeyboard(BoxLayout):
-    layout_name = StringProperty('QWERTY')
-    highlight_char = StringProperty('')
+class WpmChart(QWidget):
+    """Simple WPM history chart drawn with QPainter."""
+    def __init__(self, parent=None):
+        super().__init__(parent)
+        self.setMinimumHeight(140)
+        self._data = []
 
-    def __init__(self, **kw):
-        super().__init__(orientation='vertical', spacing=dp(3), padding=dp(4), **kw)
-        self.key_widgets = {}
-        self._on_key_tap = None
-        self.size_hint_y = None
-        self.height = key_h() * 5 + dp(20)
-        self.bind(layout_name=self._rebuild, highlight_char=self._update_highlight)
-        self._rebuild()
+    def set_data(self, wpms):
+        self._data = list(wpms)
+        self.update()
 
-    def set_tap_callback(self, cb):
-        self._on_key_tap = cb
+    def paintEvent(self, event):
+        p = QPainter(self); p.setRenderHint(QPainter.Antialiasing)
+        w, h = self.width(), self.height()
+        margin = 30
 
-    def _rebuild(self, *a):
-        self.clear_widgets(); self.key_widgets = {}
-        layout = LAYOUTS.get(self.layout_name, LAYOUTS['QWERTY'])
-        home_keys = set(layout.get('home_keys', []))
-        offsets = layout.get('offsets', [0]*5)
-        total_units = max(sum(w for _,w in row)+offsets[i] for i,row in enumerate(layout['rows']))
-        for ri, row in enumerate(layout['rows']):
-            kh = key_h()
-            row_box = BoxLayout(spacing=dp(2), size_hint_y=None, height=kh)
-            off = offsets[ri] if ri < len(offsets) else 0
-            if off > 0: row_box.add_widget(Widget(size_hint_x=off))
-            for lbl, wu in row:
-                fi = get_finger(self.layout_name, lbl)
-                ih = lbl in home_keys
-                kw = KeyWidget(key_label=lbl, width_units=wu, finger_idx=fi, is_home=ih, on_tap=self._handle_tap)
-                self.key_widgets[lbl] = kw
-                row_box.add_widget(kw)
-            used = off + sum(w for _,w in row)
-            if used < total_units: row_box.add_widget(Widget(size_hint_x=total_units-used))
-            self.add_widget(row_box)
-        self._update_highlight()
+        # Background
+        p.setBrush(QBrush(T_color('CARD')))
+        p.setPen(Qt.NoPen)
+        p.drawRoundedRect(self.rect(), 8, 8)
 
-    def _handle_tap(self, label):
-        if self._on_key_tap:
-            ch = ' ' if label == 'SPACE' else label.lower()
-            self._on_key_tap(ch)
+        if len(self._data) < 2:
+            p.setPen(QPen(T_color('DIM')))
+            p.setFont(QFont("Segoe UI", 11))
+            p.drawText(self.rect(), Qt.AlignCenter, 'Need at least 2 sessions for a chart')
+            return
 
-    def _update_highlight(self, *a):
-        for lbl, kw in self.key_widgets.items(): kw.set_highlighted(False)
-        ch = self.highlight_char
-        if not ch: return
-        target = find_key_label(self.layout_name, ch)
-        if target and target in self.key_widgets:
-            self.key_widgets[target].set_highlighted(True)
-        if ch.isupper():
-            for lbl, kw in self.key_widgets.items():
-                if lbl == '⇧': kw.set_highlighted(True)
+        chart_w = w - margin * 2
+        chart_h = h - margin * 2
+        max_wpm = max(self._data) * 1.15 or 1
+
+        # Grid lines
+        p.setPen(QPen(T_color('CARD3'), 1, Qt.DotLine))
+        for i in range(5):
+            y = margin + chart_h * i / 4
+            p.drawLine(margin, int(y), w - margin, int(y))
+            val = int(max_wpm * (1 - i / 4))
+            p.setPen(QPen(T_color('DIM')))
+            p.setFont(QFont("Segoe UI", 8))
+            p.drawText(0, int(y) - 6, margin - 4, 14, Qt.AlignRight | Qt.AlignVCenter, str(val))
+            p.setPen(QPen(T_color('CARD3'), 1, Qt.DotLine))
+
+        # Data line + fill
+        points = []
+        n = len(self._data)
+        for i, v in enumerate(self._data):
+            x = margin + (i / (n - 1)) * chart_w
+            y = margin + chart_h * (1 - v / max_wpm)
+            points.append((x, y))
+
+        # Fill area under curve
+        fill_path = QPainterPath() if False else None
+        from PySide6.QtGui import QPainterPath
+        path = QPainterPath()
+        path.moveTo(points[0][0], points[0][1])
+        for x, y in points[1:]:
+            path.lineTo(x, y)
+
+        # Fill
+        fill = QPainterPath()
+        fill.moveTo(points[0][0], margin + chart_h)
+        for x, y in points:
+            fill.lineTo(x, y)
+        fill.lineTo(points[-1][0], margin + chart_h)
+        fill.closeSubpath()
+
+        accent = T_color('ACCENT')
+        fill_color = QColor(accent)
+        fill_color.setAlpha(30)
+        p.setBrush(QBrush(fill_color))
+        p.setPen(Qt.NoPen)
+        p.drawPath(fill)
+
+        # Line
+        p.setBrush(Qt.NoBrush)
+        p.setPen(QPen(accent, 2.5))
+        p.drawPath(path)
+
+        # Dots
+        for x, y in points:
+            p.setBrush(QBrush(accent))
+            p.setPen(Qt.NoPen)
+            p.drawEllipse(QRectF(x - 4, y - 4, 8, 8))
+
+        # Labels
+        p.setPen(QPen(T_color('DIM')))
+        p.setFont(QFont("Segoe UI", 8))
+        p.drawText(self.rect().adjusted(0, 0, 0, -4), Qt.AlignHCenter | Qt.AlignBottom,
+                   f'{n} sessions')
+
+
+class VisualKeyboard(QWidget):
+    tapped = Signal(str)
+
+    def __init__(self, parent=None):
+        super().__init__(parent)
+        self.layout_name = 'QWERTY'
+        self.highlight_char = ''
+        self.key_rects = {}
+        self.flash_label = None
+        self.error_key = None  # Flash red on error
+        self.flash_timer = QTimer(); self.flash_timer.setSingleShot(True)
+        self.flash_timer.timeout.connect(self._clear_flash)
+        self.error_timer = QTimer(); self.error_timer.setSingleShot(True)
+        self.error_timer.timeout.connect(self._clear_error)
+        self.show_heatmap = False  # Show accuracy heatmap
+        self.setFixedHeight(235); self.setMinimumWidth(580)
+
+    def set_layout(self, name):
+        self.layout_name = name; self.update()
+
+    def set_highlight(self, char):
+        self.highlight_char = char; self.update()
 
     def flash_key(self, char):
-        target = find_key_label(self.layout_name, char)
-        if target and target in self.key_widgets:
-            self.key_widgets[target].flash_press()
+        self.flash_label = find_key_label(self.layout_name, char)
+        self.update(); self.flash_timer.start(120)
 
-    def refresh_theme(self):
-        for kw in self.key_widgets.values():
-            kw._update_color()
+    def flash_error(self, char):
+        self.error_key = find_key_label(self.layout_name, char)
+        self.update(); self.error_timer.start(300)
 
+    def _clear_flash(self):
+        self.flash_label = None; self.update()
 
-class RoundedCard(BoxLayout):
-    """A card with rounded corners and theme background."""
-    def __init__(self, color_key='CARD', radius=dp(10), **kw):
-        super().__init__(**kw)
-        self._color_key = color_key
-        self._radius = radius
-        with self.canvas.before:
-            Color(*T(color_key))
-            self._bg = RoundedRectangle(pos=self.pos, size=self.size, radius=[radius])
-        self.bind(pos=self._upd, size=self._upd)
+    def _clear_error(self):
+        self.error_key = None; self.update()
 
-    def _upd(self, inst, val):
-        self._bg.pos = inst.pos; self._bg.size = inst.size
+    def set_heatmap(self, enabled):
+        self.show_heatmap = enabled; self.update()
 
-    def refresh_theme(self):
-        self.canvas.before.clear()
-        with self.canvas.before:
-            Color(*T(self._color_key))
-            self._bg = RoundedRectangle(pos=self.pos, size=self.size, radius=[self._radius])
+    def paintEvent(self, event):
+        p = QPainter(self); p.setRenderHint(QPainter.Antialiasing)
+        layout = LAYOUTS.get(self.layout_name, LAYOUTS['QWERTY'])
+        home_keys = set(layout.get('home_keys', []))
+        offsets = layout.get('offsets', [0] * 5)
+        w = self.width() - 8
+        max_units = max(
+            (sum(wu for _, wu in row) + offsets[i]) for i, row in enumerate(layout['rows'])
+        )
+        uw = w / max_units; kh = 40; rs = 4; ys = 4
+        self.key_rects = {}
 
+        for ri, row in enumerate(layout['rows']):
+            off = offsets[ri] if ri < len(offsets) else 0
+            x = 4.0 + off * uw; y = ys + ri * (kh + rs)
+            for ci, (lbl, wu) in enumerate(row):
+                kw = wu * uw - 2
+                rect = QRectF(x + 1, y, kw, kh)
+                self.key_rects[lbl] = rect
+                fi = get_finger(self.layout_name, lbl)
+                ih = lbl in home_keys
+                target_lbl = find_key_label(self.layout_name, self.highlight_char) if self.highlight_char else None
+                is_hl = (lbl == target_lbl)
+                is_shift = (self.highlight_char and self.highlight_char.isupper() and lbl == '⇧')
+                is_flash = (self.flash_label == lbl)
+                is_error = (self.error_key == lbl)
 
-class StatBar(Widget):
-    """Horizontal bar showing a stat percentage."""
-    def __init__(self, label='', value=0, max_val=100, color_key='GREEN', **kw):
-        super().__init__(**kw)
-        self._label = label; self._value = value; self._max = max_val; self._ck = color_key
-        self.size_hint_y = None; self.height = dp(28)
-        self.bind(size=self._draw, pos=self._draw)
+                if is_error:
+                    bg = T_color('RED'); bg.setAlpha(200); tc = QColor(255, 255, 255)
+                elif is_hl or is_shift:
+                    bg = T_color('YELLOW'); bg.setAlpha(235); tc = QColor(26, 26, 38)
+                elif is_flash:
+                    bg = T_color('ACCENT'); bg.setAlpha(217); tc = T_color('TXT')
+                elif self.show_heatmap and len(lbl) == 1 and lbl.isalpha():
+                    # Show accuracy heatmap
+                    acc = self.parent()  # Will use stats_mgr directly
+                    from PySide6.QtWidgets import QApplication
+                    mw = QApplication.instance().activeWindow()
+                    if mw and hasattr(mw, 'stats_mgr'):
+                        accuracy = mw.stats_mgr.get_key_accuracy(self.layout_name, lbl)
+                    else:
+                        accuracy = 1.0
+                    # Green for high accuracy, red for low
+                    r = int((1.0 - accuracy) * 200)
+                    g = int(accuracy * 180)
+                    bg = QColor(r, g, 60, 140); tc = T_color('TXT')
+                else:
+                    fc = FINGER_COLS[fi] if 0 <= fi < 9 else (0.3, 0.3, 0.4)
+                    bg = QColor(int(fc[0]*255), int(fc[1]*255), int(fc[2]*255)); bg.setAlpha(115)
+                    tc = T_color('TXT')
 
-    def _draw(self, *a):
-        self.canvas.after.clear()
-        with self.canvas.after:
-            Color(*T('CARD3'))
-            RoundedRectangle(pos=self.pos, size=self.size, radius=[dp(4)])
-            pct = min(1.0, self._value / max(1, self._max))
-            Color(*T(self._ck))
-            RoundedRectangle(pos=self.pos, size=(self.width*pct, self.height), radius=[dp(4)])
+                p.setBrush(QBrush(bg)); p.setPen(Qt.NoPen)
+                p.drawRoundedRect(rect, 6, 6)
 
-    def set_value(self, value, max_val=None):
-        self._value = value
-        if max_val is not None: self._max = max_val
-        self._draw()
+                # Home key bump
+                if ih and not is_hl:
+                    p.setBrush(QBrush(QColor(255, 255, 255, 153)))
+                    p.drawRoundedRect(QRectF(rect.center().x() - 6, rect.bottom() - 7, 12, 3), 1.5, 1.5)
+
+                display = lbl if lbl != 'SPACE' else '⎵ SPACE'
+                p.setPen(QPen(tc))
+                font = p.font(); font.setPointSize(13 if len(display) <= 2 else 10)
+                p.setFont(font); p.drawText(rect, Qt.AlignCenter, display)
+                x += wu * uw
+
+    def mousePressEvent(self, event):
+        pos = event.position()
+        for lbl, rect in self.key_rects.items():
+            if rect.contains(pos):
+                ch = ' ' if lbl == 'SPACE' else lbl.lower()
+                self.tapped.emit(ch); break
 
 
 # ─── Screens ──────────────────────────────────────────────────────────────────
 
-class MenuScreen(Screen):
-    def __init__(self, **kw):
-        super().__init__(**kw)
+class MenuScreen(QWidget):
+    start_requested = Signal()
+
+    def __init__(self, main_window, parent=None):
+        super().__init__(parent)
+        self.mw = main_window
+        self._layout_btns = {}; self._lesson_btns = {}; self._mode_btns = {}
+        self._layout_group = QButtonGroup(self)
+        self._lesson_group = QButtonGroup(self)
+        self._mode_group = QButtonGroup(self)
         self._build_ui()
 
     def _build_ui(self):
-        self.root_box = BoxLayout(orientation='vertical', padding=dp(16), spacing=dp(8))
-        scroll = ScrollView(bar_width=dp(4))
-        content = BoxLayout(orientation='vertical', size_hint_y=None, spacing=dp(8))
-        content.bind(minimum_height=content.setter('height'))
+        outer = QVBoxLayout(self)
+        outer.setContentsMargins(0, 0, 0, 0)
+        scroll = QScrollArea()
+        scroll.setWidgetResizable(True)
+        scroll.setFrameShape(QFrame.NoFrame)
+        content = QWidget()
+        layout = QVBoxLayout(content)
+        layout.setSpacing(10)
+        layout.setContentsMargins(20, 16, 20, 16)
 
         # Title
-        title = Label(text='⌨️  Keyboard Trainer', font_size=sp(30), size_hint_y=None,
-                       height=dp(55), color=T('TXT'))
-        content.add_widget(title)
-        subtitle = Label(text='Learn to type fast & accurately on any layout',
-                          font_size=sp(13), size_hint_y=None, height=dp(26), color=T('DIM'))
-        content.add_widget(subtitle)
+        title = QLabel('⌨️  Keyboard Trainer')
+        title.setFont(QFont("Segoe UI", 26, QFont.Bold))
+        title.setAlignment(Qt.AlignCenter)
+        layout.addWidget(title)
+        sub = QLabel('Learn to type fast & accurately on any layout')
+        sub.setFont(QFont("Segoe UI", 12))
+        sub.setStyleSheet(f"color: {T('DIM')};")
+        sub.setAlignment(Qt.AlignCenter)
+        layout.addWidget(sub)
+        layout.addSpacing(6)
 
         # Layout selection
-        content.add_widget(self._section('Select Keyboard Layout'))
-        self._layout_btns = {}
-        layout_grid = GridLayout(cols=2, spacing=dp(6), size_hint_y=None, height=dp(44)*2+dp(6))
+        layout.addWidget(self._section_label('Select Keyboard Layout'))
+        lg = QGridLayout(); lg.setSpacing(6)
         sel_layout = settings_mgr.get('layout', 'QWERTY')
-        for name, data in LAYOUTS.items():
-            b = ToggleButton(text=data['display'], group='layout', font_size=sp(12),
-                             background_normal='', background_down='', background_color=T('CARD2'), color=T('TXT'))
-            if name == sel_layout: b.state = 'down'; b.background_color = T('ACCENT')
-            b.bind(state=lambda s,v,n=name: self._pick('layout',n,v))
-            b.bind(state=self._style_toggle)
-            self._layout_btns[name] = b
-            layout_grid.add_widget(b)
-        content.add_widget(layout_grid)
+        for i, (name, data) in enumerate(LAYOUTS.items()):
+            b = QPushButton(data['display'])
+            b.setCheckable(True); b.setFixedHeight(42)
+            b.setChecked(name == sel_layout)
+            b.setStyleSheet(toggle_stylesheet(name == sel_layout))
+            self._layout_btns[name] = b; self._layout_group.addButton(b)
+            lg.addWidget(b, i // 2, i % 2)
+        self._layout_group.idToggled.connect(self._on_layout_toggle)
+        layout.addLayout(lg)
 
         # Lesson selection
-        content.add_widget(self._section('Choose Lesson'))
-        self._lesson_btns = {}
-        lesson_grid = GridLayout(cols=2, spacing=dp(5), size_hint_y=None)
+        layout.addWidget(self._section_label('Choose Lesson'))
+        lsg = QGridLayout(); lsg.setSpacing(5)
         sel_lesson = settings_mgr.get('lesson', 'home_row')
-        for ltype, lname, ldesc in LESSON_TYPES:
-            b = ToggleButton(text=lname, group='lesson', font_size=sp(11),
-                             background_normal='', background_down='', background_color=T('CARD2'),
-                             color=T('TXT'), size_hint_y=None, height=dp(42))
-            if ltype == sel_lesson: b.state = 'down'; b.background_color = T('ACCENT')
-            b.bind(state=lambda s,v,t=ltype: self._pick('lesson',t,v))
-            b.bind(state=self._style_toggle)
-            self._lesson_btns[ltype] = b
-            lesson_grid.add_widget(b)
-        lesson_grid.height = dp(42)*4 + dp(15)
-        content.add_widget(lesson_grid)
+        for i, (ltype, lname, ldesc) in enumerate(LESSON_TYPES):
+            b = QPushButton(lname)
+            b.setCheckable(True); b.setFixedHeight(42)
+            b.setChecked(ltype == sel_lesson)
+            b.setStyleSheet(toggle_stylesheet(ltype == sel_lesson))
+            b.setToolTip(ldesc)
+            self._lesson_btns[ltype] = b; self._lesson_group.addButton(b)
+            lsg.addWidget(b, i // 2, i % 2)
+        self._lesson_group.idToggled.connect(self._on_lesson_toggle)
+        layout.addLayout(lsg)
 
         # Practice mode
-        content.add_widget(self._section('Practice Mode'))
-        self._mode_btns = {}
-        mode_grid = GridLayout(cols=2, spacing=dp(5), size_hint_y=None, height=dp(42)*2+dp(5))
+        layout.addWidget(self._section_label('Practice Mode'))
+        mg = QGridLayout(); mg.setSpacing(5)
         sel_mode = settings_mgr.get('mode', 'completion')
-        for mtype, mname, mdesc in PRACTICE_MODES:
-            b = ToggleButton(text=mname, group='mode', font_size=sp(11),
-                             background_normal='', background_down='', background_color=T('CARD2'),
-                             color=T('TXT'), size_hint_y=None, height=dp(42))
-            if mtype == sel_mode: b.state = 'down'; b.background_color = T('ACCENT')
-            b.bind(state=lambda s,v,t=mtype: self._pick('mode',t,v))
-            b.bind(state=self._style_toggle)
-            self._mode_btns[mtype] = b
-            mode_grid.add_widget(b)
-        content.add_widget(mode_grid)
+        for i, (mtype, mname, mdesc) in enumerate(PRACTICE_MODES):
+            b = QPushButton(mname)
+            b.setCheckable(True); b.setFixedHeight(42)
+            b.setChecked(mtype == sel_mode)
+            b.setStyleSheet(toggle_stylesheet(mtype == sel_mode))
+            b.setToolTip(mdesc)
+            self._mode_btns[mtype] = b; self._mode_group.addButton(b)
+            mg.addWidget(b, i // 2, i % 2)
+        self._mode_group.idToggled.connect(self._on_mode_toggle)
+        layout.addLayout(mg)
 
-        # Buttons
-        content.add_widget(Widget(size_hint_y=None, height=dp(12)))
-        start_btn = Button(text='▶  Start Typing', font_size=sp(18), size_hint_y=None, height=btn_h(),
-                           background_normal='', background_down='', background_color=T('ACCENT'), color=T('TXT'))
-        start_btn.bind(on_press=self._start)
-        content.add_widget(start_btn)
+        layout.addSpacing(8)
 
-        custom_btn = Button(text='✏️  Custom Text Practice', font_size=sp(14), size_hint_y=None, height=dp(44),
-                            background_normal='', background_down='', background_color=T('CARD3'), color=T('TXT'))
-        custom_btn.bind(on_press=lambda *a: setattr(self.manager, 'current', 'custom'))
-        content.add_widget(custom_btn)
+        # Start button
+        start_btn = QPushButton('▶  Start Typing')
+        start_btn.setFixedHeight(52)
+        start_btn.setStyleSheet(btn_stylesheet('ACCENT', 18, bold=True, text_color='#ffffff'))
+        start_btn.clicked.connect(self._start)
+        layout.addWidget(start_btn)
 
-        btn_row = BoxLayout(spacing=dp(8), size_hint_y=None, height=dp(44))
-        stats_btn = Button(text='📊  Statistics', font_size=sp(13),
-                           background_normal='', background_down='', background_color=T('CARD2'), color=T('TXT'))
-        stats_btn.bind(on_press=lambda *a: setattr(self.manager, 'current', 'stats'))
-        settings_btn = Button(text='⚙️  Settings', font_size=sp(13),
-                              background_normal='', background_down='', background_color=T('CARD2'), color=T('TXT'))
-        settings_btn.bind(on_press=lambda *a: setattr(self.manager, 'current', 'settings'))
-        btn_row.add_widget(stats_btn); btn_row.add_widget(settings_btn)
-        content.add_widget(btn_row)
+        # Custom text
+        custom_btn = QPushButton('✏️  Custom Text Practice')
+        custom_btn.setFixedHeight(44)
+        custom_btn.setStyleSheet(btn_stylesheet('CARD3', 14))
+        custom_btn.clicked.connect(lambda: self.mw.go_to('custom'))
+        layout.addWidget(custom_btn)
 
-        scroll.add_widget(content)
-        self.root_box.add_widget(scroll)
-        self.add_widget(self.root_box)
+        # Stats & Settings row
+        row = QHBoxLayout(); row.setSpacing(8)
+        stats_btn = QPushButton('📊  Statistics')
+        stats_btn.setFixedHeight(44)
+        stats_btn.setStyleSheet(btn_stylesheet('CARD2', 13))
+        stats_btn.clicked.connect(lambda: self.mw.go_to('stats'))
+        settings_btn = QPushButton('⚙️  Settings')
+        settings_btn.setFixedHeight(44)
+        settings_btn.setStyleSheet(btn_stylesheet('CARD2', 13))
+        settings_btn.clicked.connect(lambda: self.mw.go_to('settings'))
+        row.addWidget(stats_btn); row.addWidget(settings_btn)
+        layout.addLayout(row)
 
-    def _section(self, text):
-        l = Label(text=text, font_size=sp(14), size_hint_y=None, height=dp(28),
-                  halign='left', valign='middle', color=T('ACCENT'))
-        l.bind(size=lambda *a: l.setter('text_size')(l, l.size))
+        layout.addStretch()
+        scroll.setWidget(content)
+        outer.addWidget(scroll)
+
+    def _section_label(self, text):
+        l = QLabel(text)
+        l.setFont(QFont("Segoe UI", 13, QFont.Bold))
+        l.setStyleSheet(f"color: {T('ACCENT')}; background: transparent;")
         return l
 
-    def _style_toggle(self, btn, val):
-        btn.background_color = T('ACCENT') if val == 'down' else T('CARD2')
+    def _on_layout_toggle(self, btn, checked):
+        if not checked: return
+        for name, b in self._layout_btns.items():
+            sel = b == btn
+            b.setStyleSheet(toggle_stylesheet(sel))
+            if sel: settings_mgr.set('layout', name)
 
-    def _pick(self, key, name, state):
-        if state == 'down':
-            settings_mgr.set(key, name)
+    def _on_lesson_toggle(self, btn, checked):
+        if not checked: return
+        for ltype, b in self._lesson_btns.items():
+            sel = b == btn
+            b.setStyleSheet(toggle_stylesheet(sel))
+            if sel: settings_mgr.set('lesson', ltype)
 
-    def _start(self, *a):
-        app = App.get_running_app()
-        app.current_layout = settings_mgr.get('layout', 'QWERTY')
-        app.current_lesson = settings_mgr.get('lesson', 'home_row')
-        app.current_mode = settings_mgr.get('mode', 'completion')
-        ts = self.manager.get_screen('typing')
-        ts.start_lesson(app.current_layout, app.current_lesson, app.current_mode)
-        self.manager.current = 'typing'
+    def _on_mode_toggle(self, btn, checked):
+        if not checked: return
+        for mtype, b in self._mode_btns.items():
+            sel = b == btn
+            b.setStyleSheet(toggle_stylesheet(sel))
+            if sel: settings_mgr.set('mode', mtype)
+
+    def _start(self):
+        self.mw.current_layout = settings_mgr.get('layout', 'QWERTY')
+        self.mw.current_lesson = settings_mgr.get('lesson', 'home_row')
+        self.mw.current_mode = settings_mgr.get('mode', 'completion')
+        self.mw.typing_screen.start_lesson(
+            self.mw.current_layout, self.mw.current_lesson, self.mw.current_mode)
+        self.mw.go_to('typing')
 
     def refresh_theme(self):
-        # Rebuild would be complex; user can restart for full theme change
-        pass
+        for name, b in self._layout_btns.items():
+            b.setStyleSheet(toggle_stylesheet(b.isChecked()))
+        for ltype, b in self._lesson_btns.items():
+            b.setStyleSheet(toggle_stylesheet(b.isChecked()))
+        for mtype, b in self._mode_btns.items():
+            b.setStyleSheet(toggle_stylesheet(b.isChecked()))
 
 
-class TypingScreen(Screen):
-    wpm = NumericProperty(0)
-    accuracy_p = NumericProperty(100)
-    elapsed = NumericProperty(0)
-
-    def __init__(self, **kw):
-        super().__init__(**kw)
-        self.layout_name = 'QWERTY'
-        self.lesson_text = ''
-        self.typed = []
-        self.char_idx = 0
-        self.start_time = None
-        self.errors = 0
-        self.total_keystrokes = 0
-        self.streak = 0
-        self._keyboard = None
-        self._timer_event = None
-        self._finished = False
-        self.mode = 'completion'
-        self.timer_secs = 0
+class TypingScreen(QWidget):
+    def __init__(self, main_window, parent=None):
+        super().__init__(parent)
+        self.mw = main_window
+        self.setFocusPolicy(Qt.StrongFocus)
+        self.layout_name = 'QWERTY'; self.lesson_text = ''
+        self.typed = []; self.char_idx = 0; self.start_time = None
+        self.errors = 0; self.total_keystrokes = 0; self.streak = 0
+        self.best_streak = 0; self._finished = False
+        self.mode = 'completion'; self.timer_secs = 0
+        self.key_errors = {}  # Track per-key errors for this session
+        self._timer = QTimer(); self._timer.setInterval(200)
+        self._timer.timeout.connect(self._tick)
+        self._caps_lock = False
         self._build_ui()
 
     def _build_ui(self):
-        self.root_box = BoxLayout(orientation='vertical', padding=dp(8), spacing=dp(4))
+        layout = QVBoxLayout(self)
+        layout.setSpacing(4); layout.setContentsMargins(10, 8, 10, 8)
 
         # Top bar
-        top = BoxLayout(size_hint_y=None, height=dp(44), spacing=dp(6))
-        back_btn = Button(text='← Back', size_hint_x=None, width=dp(76),
-                          background_normal='', background_down='', background_color=T('CARD2'), color=T('TXT'), font_size=sp(12))
-        back_btn.bind(on_press=self._go_back)
-        top.add_widget(back_btn)
-        self.lbl_lesson = Label(text='', font_size=sp(12), color=T('DIM'), halign='left')
-        self.lbl_lesson.bind(size=lambda *a: self.lbl_lesson.setter('text_size')(self.lbl_lesson, self.lbl_lesson.size))
-        top.add_widget(self.lbl_lesson)
-
-        stat_box = BoxLayout(size_hint_x=None, width=dp(300) if not IS_MOBILE else dp(240), spacing=dp(4))
-        self.lbl_wpm = Label(text='WPM: 0', font_size=sp(13), color=T('GREEN'), bold=True)
-        self.lbl_acc = Label(text='ACC: 100%', font_size=sp(13), color=T('ACCENT'), bold=True)
-        self.lbl_time = Label(text='⏱ 0:00', font_size=sp(13), color=T('ORANGE'))
-        self.lbl_streak = Label(text='🔥 0', font_size=sp(13), color=T('YELLOW'))
-        stat_box.add_widget(self.lbl_wpm); stat_box.add_widget(self.lbl_acc)
-        stat_box.add_widget(self.lbl_time); stat_box.add_widget(self.lbl_streak)
-        top.add_widget(stat_box)
-        self.root_box.add_widget(top)
+        top = QHBoxLayout(); top.setSpacing(6)
+        back_btn = QPushButton('← Back')
+        back_btn.setFixedWidth(76); back_btn.setFocusPolicy(Qt.NoFocus)
+        back_btn.setStyleSheet(btn_stylesheet('CARD2', 12))
+        back_btn.clicked.connect(self._go_back)
+        top.addWidget(back_btn)
+        self.lbl_lesson = QLabel('')
+        self.lbl_lesson.setFont(QFont("Segoe UI", 11))
+        self.lbl_lesson.setStyleSheet(f"color: {T('DIM')}; background: transparent;")
+        top.addWidget(self.lbl_lesson, 1)
+        self.lbl_wpm = QLabel('WPM: 0')
+        self.lbl_wpm.setFont(QFont("Segoe UI", 12, QFont.Bold))
+        self.lbl_wpm.setStyleSheet(f"color: {T('GREEN')}; background: transparent;")
+        top.addWidget(self.lbl_wpm)
+        self.lbl_acc = QLabel('ACC: 100%')
+        self.lbl_acc.setFont(QFont("Segoe UI", 12, QFont.Bold))
+        self.lbl_acc.setStyleSheet(f"color: {T('ACCENT')}; background: transparent;")
+        top.addWidget(self.lbl_acc)
+        self.lbl_time = QLabel('⏱ 0:00')
+        self.lbl_time.setFont(QFont("Segoe UI", 12))
+        self.lbl_time.setStyleSheet(f"color: {T('ORANGE')}; background: transparent;")
+        top.addWidget(self.lbl_time)
+        self.lbl_streak = QLabel('🔥 0')
+        self.lbl_streak.setFont(QFont("Segoe UI", 12))
+        self.lbl_streak.setStyleSheet(f"color: {T('YELLOW')}; background: transparent;")
+        top.addWidget(self.lbl_streak)
+        self.lbl_words = QLabel('')
+        self.lbl_words.setFont(QFont("Segoe UI", 11))
+        self.lbl_words.setStyleSheet(f"color: {T('DIM')}; background: transparent;")
+        top.addWidget(self.lbl_words)
+        layout.addLayout(top)
 
         # Progress bar
-        self.progress = Widget(size_hint_y=None, height=dp(6))
-        self.root_box.add_widget(self.progress)
+        self.progress = ProgressBar()
+        layout.addWidget(self.progress)
 
-        # Finger hint
-        self.lbl_finger = Label(text='', font_size=sp(13), size_hint_y=None, height=dp(24), color=T('DIM'))
-        self.root_box.add_widget(self.lbl_finger)
+        # Finger hint + expected key
+        hint_row = QHBoxLayout()
+        self.lbl_finger = QLabel('')
+        self.lbl_finger.setFixedHeight(22)
+        self.lbl_finger.setFont(QFont("Segoe UI", 12))
+        self.lbl_finger.setStyleSheet(f"color: {T('DIM')}; background: transparent;")
+        hint_row.addWidget(self.lbl_finger)
+        self.lbl_expected = QLabel('')
+        self.lbl_expected.setFixedHeight(22)
+        self.lbl_expected.setFont(QFont("Segoe UI", 12, QFont.Bold))
+        self.lbl_expected.setStyleSheet(f"color: {T('YELLOW')}; background: transparent;")
+        self.lbl_expected.setAlignment(Qt.AlignRight | Qt.AlignVCenter)
+        hint_row.addWidget(self.lbl_expected)
+        layout.addLayout(hint_row)
 
         # Typing area
-        th = typing_h()
-        typing_frame = BoxLayout(size_hint_y=None, height=th, padding=dp(10))
-        with typing_frame.canvas.before:
-            Color(*T('CARD'))
-            self._typing_bg = RoundedRectangle(pos=typing_frame.pos, size=typing_frame.size, radius=[dp(10)])
-        typing_frame.bind(pos=self._upd_bg, size=self._upd_bg)
-        self.lbl_text = Label(text='', font_size=sp(18 if IS_MOBILE else 20), halign='left', valign='middle',
-                              markup=True, color=T('TXT'))
-        self.lbl_text.bind(size=lambda *a: self.lbl_text.setter('text_size')(self.lbl_text, self.lbl_text.size))
-        typing_frame.add_widget(self.lbl_text)
-        self.root_box.add_widget(typing_frame)
+        self.typing_display = QTextEdit()
+        self.typing_display.setReadOnly(True)
+        self.typing_display.setFocusPolicy(Qt.NoFocus)
+        self.typing_display.setFixedHeight(150)
+        self.typing_display.setFont(QFont("Consolas", 16))
+        self.typing_display.setStyleSheet(f"""
+            QTextEdit {{
+                background-color: {T('CARD')}; color: {T('TXT')};
+                border: none; border-radius: 10px; padding: 12px;
+            }}
+        """)
+        layout.addWidget(self.typing_display)
 
-        self.root_box.add_widget(Widget(size_hint_y=0.2))
+        layout.addSpacing(6)
 
         # Visual keyboard
         self.keyboard = VisualKeyboard()
-        self.keyboard.set_tap_callback(self._handle_tap)
-        self.root_box.add_widget(self.keyboard)
+        self.keyboard.tapped.connect(self._handle_tap)
+        layout.addWidget(self.keyboard)
 
         # Hint
-        hint_text = 'Tap the highlighted key or type on your keyboard.' if IS_MOBILE else \
-                    'Type the highlighted character. Press Escape to quit.'
-        self.lbl_hint = Label(text=hint_text, font_size=sp(10), size_hint_y=None, height=dp(20), color=T('DIM'))
-        self.root_box.add_widget(self.lbl_hint)
-
-        self.add_widget(self.root_box)
-
-    def _upd_bg(self, inst, val):
-        self._typing_bg.pos = inst.pos; self._typing_bg.size = inst.size
+        hint = QLabel('Type the highlighted character  •  Esc = quit  •  Tab = restart')
+        hint.setFixedHeight(18)
+        hint.setFont(QFont("Segoe UI", 9))
+        hint.setStyleSheet(f"color: {T('DIM')}; background: transparent;")
+        hint.setAlignment(Qt.AlignCenter)
+        layout.addWidget(hint)
 
     def start_lesson(self, layout_name, lesson_type, mode='completion', custom_text=''):
-        self.layout_name = layout_name
-        self.mode = mode
-        self.timer_secs = 0
+        self.layout_name = layout_name; self.mode = mode; self.timer_secs = 0
+        self.key_errors = {}
         if mode.startswith('timed_'):
             self.timer_secs = int(mode.split('_')[1])
-            self.lesson_text = gen_lesson(layout_name, lesson_type, 500)
+            self.lesson_text = gen_lesson(layout_name, lesson_type, 800)
         elif lesson_type == 'custom':
             self.lesson_text = custom_text if custom_text else 'The quick brown fox jumps over the lazy dog.'
         else:
-            self.lesson_text = gen_lesson(layout_name, lesson_type, 140)
-
+            self.lesson_text = gen_lesson(layout_name, lesson_type, 160)
+        # Ensure lesson text is not empty
+        if not self.lesson_text.strip():
+            self.lesson_text = 'The quick brown fox jumps over the lazy dog.'
         self.typed = []; self.char_idx = 0; self.start_time = None
-        self.errors = 0; self.total_keystrokes = 0; self.streak = 0
-        self._finished = False; self.wpm = 0; self.accuracy_p = 100; self.elapsed = 0
+        self.errors = 0; self.total_keystrokes = 0; self.streak = 0; self.best_streak = 0
+        self._finished = False
+        mode_disp = mode.replace('_', ' ').title()
+        self.lbl_lesson.setText(
+            f'{LAYOUTS[layout_name]["display"]}  •  {lesson_type.replace("_"," ").title()}  •  {mode_disp}')
+        self.keyboard.set_layout(layout_name)
+        self.keyboard.show_heatmap = settings_mgr.get('show_keyboard', True)
+        self._refresh_display(); self._update_stats()
+        self._timer.start()
+        self.setFocus()
 
-        mode_disp = mode.replace('_',' ').title()
-        self.lbl_lesson.text = f'{LAYOUTS[layout_name]["display"]}  •  {lesson_type.replace("_"," ").title()}  •  {mode_disp}'
-        self.keyboard.layout_name = layout_name
-        self._refresh_display()
-        self._start_listening()
-
-        if self._timer_event: self._timer_event.cancel()
-        self._timer_event = Clock.schedule_interval(self._tick, 0.25)
-
-    def _start_listening(self):
-        self._stop_listening()
-        try:
-            self._keyboard = Window.request_keyboard(self._keyboard_closed, self)
-            self._keyboard.bind(on_key_down=self._on_key_down)
-        except: pass
-
-    def _stop_listening(self):
-        if self._keyboard:
-            try: self._keyboard.unbind(on_key_down=self._on_key_down); self._keyboard.release()
-            except: pass
-            self._keyboard = None
-
-    def _keyboard_closed(self): self._keyboard = None
-
-    def _on_key_down(self, keyboard, keycode, text, modifiers):
-        self._process_key(keycode, text, modifiers)
-
-    def _process_key(self, keycode, text, modifiers):
+    def keyPressEvent(self, event):
         if self._finished: return
-        key_name = keycode[1] if isinstance(keycode, (list,tuple)) and len(keycode)>1 else ''
-        if key_name == 'escape': self._go_back(); return
-        if key_name == 'backspace': self._handle_backspace(); return
-        skip = ('lshift','rshift','shift','capslock','tab','ctrl','lctrl','rctrl',
-                'alt','lalt','ralt','super','lsuper','rsuper','alt-gr',
-                'up','down','left','right','insert','delete','home','end',
-                'pageup','pagedown','numlock','scrolllock','print','sysreq','pause','break')
-        skip += tuple(f'f{i}' for i in range(1,13))
-        if key_name in skip: return
+        key = event.key(); text = event.text()
+        if key == Qt.Key_Escape: self._go_back(); return
+        if key == Qt.Key_Tab:
+            # Restart lesson
+            self.start_lesson(self.layout_name, settings_mgr.get('lesson', 'home_row'), self.mode)
+            return
+        if key == Qt.Key_Backspace: self._handle_backspace(); return
+        if key == Qt.Key_CapsLock:
+            self._caps_lock = not self._caps_lock; return
+        skip_keys = {
+            Qt.Key_Shift, Qt.Key_Control, Qt.Key_Alt, Qt.Key_Meta,
+            Qt.Key_Tab, Qt.Key_Insert, Qt.Key_Delete,
+            Qt.Key_Home, Qt.Key_End, Qt.Key_PageUp, Qt.Key_PageDown,
+            Qt.Key_Up, Qt.Key_Down, Qt.Key_Left, Qt.Key_Right,
+            Qt.Key_NumLock, Qt.Key_ScrollLock, Qt.Key_Pause,
+            Qt.Key_F1, Qt.Key_F2, Qt.Key_F3, Qt.Key_F4, Qt.Key_F5,
+            Qt.Key_F6, Qt.Key_F7, Qt.Key_F8, Qt.Key_F9, Qt.Key_F10,
+            Qt.Key_F11, Qt.Key_F12, Qt.Key_Enter, Qt.Key_Return,
+        }
+        if key in skip_keys: return
         if text and len(text) == 1:
             self._handle_char(text)
 
@@ -807,192 +1120,295 @@ class TypingScreen(Screen):
     def _handle_char(self, ch):
         if self.char_idx >= len(self.lesson_text): return
         if self.start_time is None: self.start_time = time.time()
-
         expected = self.lesson_text[self.char_idx]
         correct = (ch == expected)
-        self.typed.append((ch, correct))
-        self.total_keystrokes += 1
+        self.typed.append((ch, correct)); self.total_keystrokes += 1
+
+        # Record per-key stats
+        self.mw.stats_mgr.record_key(self.layout_name, expected, correct)
 
         if correct:
             self.streak += 1
+            if self.streak > self.best_streak: self.best_streak = self.streak
             sound_mgr.play('click')
-            if settings_mgr.get('vibration') and HAS_VIBRATOR: vibrate(15)
+            # Streak milestone sounds
+            if self.streak > 0 and self.streak % 25 == 0:
+                sound_mgr.play('streak')
+            self.keyboard.flash_key(ch)
         else:
-            self.errors += 1; self.streak = 0
-            sound_mgr.play('error')
-            if settings_mgr.get('vibration') and HAS_VIBRATOR: vibrate(40)
+            self.errors += 1; self.streak = 0; sound_mgr.play('error')
+            self.keyboard.flash_error(expected)
+            # Track key errors
+            ek = expected.upper()
+            self.key_errors[ek] = self.key_errors.get(ek, 0) + 1
 
-        self.keyboard.flash_key(ch if correct else expected)
-        self.char_idx += 1
-        self._refresh_display()
-        self._update_stats()
-
+        self.char_idx += 1; self._refresh_display(); self._update_stats()
         if self.mode == 'completion' and self.char_idx >= len(self.lesson_text):
             self._finish()
 
     def _handle_backspace(self):
         if self.char_idx > 0 and self.typed:
-            self.char_idx -= 1
-            ch, correct = self.typed.pop()
-            self.total_keystrokes -= 1
-            if not correct: self.errors -= 1
-            self.streak = 0
-            self._refresh_display(); self._update_stats()
-
-    def _refresh_display(self):
-        text = self.lesson_text; parts = []
-        for i, (ch, correct) in enumerate(self.typed):
-            c = text[i]
-            if correct:
-                parts.append(f'[color=22dd55]{self._esc(c)}[/color]')
-            else:
-                parts.append(f'[color=ff3333][s]{self._esc(c)}[/s][/color]')
-        if self.char_idx < len(text):
-            cur = text[self.char_idx]
-            parts.append(f'[u][color=ffd822]{self._esc(cur)}[/color][/u]')
-            self.keyboard.highlight_char = cur
-            fi = get_finger(self.layout_name, cur)
-            self.lbl_finger.text = f'👉 {FINGER_NAMES[fi]}' if 0<=fi<9 else ''
-            self.lbl_finger.color = (*FINGER_COLS[fi],1) if 0<=fi<9 else T('DIM')
-        else:
-            self.keyboard.highlight_char = ''
-            self.lbl_finger.text = '✅ Complete!'
-            self.lbl_finger.color = T('GREEN')
-
-        for i in range(self.char_idx+1, min(len(text), self.char_idx+80)):
-            parts.append(f'[color=707078]{self._esc(text[i])}[/color]')
-        self.lbl_text.text = ''.join(parts)
-
-        # Progress bar
-        self.progress.canvas.after.clear()
-        with self.progress.canvas.after:
-            Color(*T('CARD3'))
-            RoundedRectangle(pos=self.progress.pos, size=self.progress.size, radius=[dp(3)])
-            if self.mode.startswith('timed_') and self.start_time:
-                elapsed_s = time.time() - self.start_time
-                pct = min(1.0, elapsed_s / self.timer_secs)
-                Color(*T('ORANGE'))
-            else:
-                pct = self.char_idx / max(1, len(text))
-                Color(*T('GREEN'))
-            RoundedRectangle(pos=self.progress.pos,
-                             size=(self.width*pct, self.progress.height), radius=[dp(3)])
+            self.char_idx -= 1; ch, correct = self.typed.pop()
+            self.total_keystrokes = max(0, self.total_keystrokes - 1)
+            if not correct: self.errors = max(0, self.errors - 1)
+            self.streak = 0; self._refresh_display(); self._update_stats()
 
     @staticmethod
     def _esc(ch):
-        return ch.replace('&','&amp;').replace('[','&bl;').replace(']','&br;')
+        return ch.replace('&', '&amp;').replace('<', '&lt;').replace('>', '&gt;').replace('"', '&quot;')
+
+    def _refresh_display(self):
+        text = self.lesson_text; parts = []
+        # Show a window of characters around the current position
+        window_before = 50; window_after = 80
+        start = max(0, self.char_idx - window_before)
+
+        for i in range(start, self.char_idx):
+            if i >= len(self.typed): break
+            ch, correct = self.typed[i]
+            c = text[i]; escaped = self._esc(c)
+            if correct:
+                parts.append(f'<span style="color:{T("GREEN")}">{escaped}</span>')
+            else:
+                # Show what was expected with strikethrough, and what was typed
+                typed_escaped = self._esc(ch) if ch != c else ''
+                parts.append(
+                    f'<span style="color:{T("RED")}"><s>{escaped}</s></span>'
+                )
+
+        if self.char_idx < len(text):
+            cur = text[self.char_idx]
+            cur_escaped = self._esc(cur)
+            # Determine display character
+            display_char = '⎵' if cur == ' ' else cur_escaped
+            parts.append(
+                f'<span style="color:{T("YELLOW")}; text-decoration:underline; '
+                f'font-weight:bold; background-color:rgba(255,255,255,15); '
+                f'border-radius:2px; padding:0 2px;">{display_char}</span>'
+            )
+            self.keyboard.set_highlight(cur)
+            fi = get_finger(self.layout_name, cur)
+            if 0 <= fi < 9:
+                fc = FINGER_COLS[fi]
+                col = rgb_hex(*fc)
+                self.lbl_finger.setText(f'👉 {FINGER_NAMES[fi]}')
+                self.lbl_finger.setStyleSheet(f"color: {col}; background: transparent;")
+            else:
+                self.lbl_finger.setText('')
+                self.lbl_finger.setStyleSheet(f"color: {T('DIM')}; background: transparent;")
+            # Show expected key label
+            key_label = find_key_label(self.layout_name, cur)
+            if key_label and key_label != 'SPACE':
+                shift_note = ' (Shift+)' if cur.isupper() else ''
+                self.lbl_expected.setText(f'Press: {key_label}{shift_note}')
+            elif cur == ' ':
+                self.lbl_expected.setText('Press: Space')
+            else:
+                self.lbl_expected.setText('')
+        else:
+            self.keyboard.set_highlight('')
+            self.lbl_finger.setText('✅ Complete!')
+            self.lbl_finger.setStyleSheet(f"color: {T('GREEN')}; background: transparent;")
+            self.lbl_expected.setText('')
+
+        end = min(len(text), self.char_idx + window_after)
+        for i in range(self.char_idx + 1, end):
+            escaped = self._esc(text[i])
+            # Slightly highlight upcoming space boundaries for readability
+            if text[i] == ' ':
+                parts.append(f'<span style="color:{T("CARD3")}">·</span>')
+            else:
+                parts.append(f'<span style="color:{T("DIM")}">{escaped}</span>')
+
+        html = ('<div style="font-family: Consolas, monospace; font-size: 18px; '
+                'line-height: 1.6; letter-spacing: 0.5px;">' + ''.join(parts) + '</div>')
+        self.typing_display.setHtml(html)
+        # Scroll to keep cursor visible
+        sb = self.typing_display.verticalScrollBar()
+        sb.setValue(sb.maximum())
+
+        # Progress bar
+        if self.mode.startswith('timed_') and self.start_time:
+            elapsed_s = time.time() - self.start_time
+            pct = min(1.0, elapsed_s / self.timer_secs)
+            self.progress.set_value(pct, 'ORANGE')
+        else:
+            pct = self.char_idx / max(1, len(text))
+            self.progress.set_value(pct, 'GREEN')
 
     def _update_stats(self):
         if self.start_time is None:
-            self.lbl_wpm.text = 'WPM: 0'; self.lbl_acc.text = 'ACC: 100%'; return
-        elapsed = max(0.1, time.time()-self.start_time)
-        correct_chars = sum(1 for _,ok in self.typed if ok)
-        wpm = (correct_chars/5)/(elapsed/60)
-        acc = (correct_chars/max(1,self.total_keystrokes))*100
-        self.wpm = wpm; self.accuracy_p = acc
-        self.lbl_wpm.text = f'WPM: {int(wpm)}'
-        self.lbl_wpm.color = T('GREEN') if wpm>=30 else T('ORANGE') if wpm>=15 else T('RED')
-        self.lbl_acc.text = f'ACC: {acc:.1f}%'
-        self.lbl_acc.color = T('GREEN') if acc>=95 else T('ORANGE') if acc>=85 else T('RED')
-        self.lbl_streak.text = f'🔥 {self.streak}'
+            self.lbl_wpm.setText('WPM: 0'); self.lbl_acc.setText('ACC: 100%')
+            self.lbl_words.setText(''); return
+        elapsed = max(0.1, time.time() - self.start_time)
+        correct_chars = sum(1 for _, ok in self.typed if ok)
+        wpm = (correct_chars / 5) / (elapsed / 60)
+        acc = (correct_chars / max(1, self.total_keystrokes)) * 100
 
-    def _tick(self, dt):
+        # Word count for timed mode
+        if self.mode.startswith('timed_'):
+            word_count = sum(1 for i, (_, ok) in enumerate(self.typed)
+                           if ok and self.typed[i][0] == ' ' and i > 0 and self.typed[i-1][1])
+            self.lbl_words.setText(f'📝 ~{word_count}w')
+
+        self.lbl_wpm.setText(f'WPM: {int(wpm)}')
+        self.lbl_wpm.setStyleSheet(
+            f"color: {T('GREEN') if wpm >= 30 else T('ORANGE') if wpm >= 15 else T('RED')}; background: transparent;")
+        self.lbl_acc.setText(f'ACC: {acc:.1f}%')
+        self.lbl_acc.setStyleSheet(
+            f"color: {T('GREEN') if acc >= 95 else T('ORANGE') if acc >= 85 else T('RED')}; background: transparent;")
+        self.lbl_streak.setText(f'🔥 {self.streak}')
+        if self.streak >= 10:
+            self.lbl_streak.setStyleSheet(f"color: {T('YELLOW')}; background: transparent;")
+        else:
+            self.lbl_streak.setStyleSheet(f"color: {T('DIM')}; background: transparent;")
+
+    def _tick(self):
         if self.start_time is None:
             if self.mode.startswith('timed_'):
-                self.lbl_time.text = f'⏱ 0:{self.timer_secs:02d}'
+                self.lbl_time.setText(f'⏱ 0:{self.timer_secs:02d}')
             else:
-                self.lbl_time.text = '⏱ 0:00'
+                self.lbl_time.setText('⏱ 0:00')
             return
         elapsed_s = time.time() - self.start_time
         if self.mode.startswith('timed_'):
             remaining = max(0, self.timer_secs - elapsed_s)
             m, s = divmod(int(remaining), 60)
-            self.lbl_time.text = f'⏱ {m}:{s:02d}'
-            self.lbl_time.color = T('RED') if remaining < 10 else T('ORANGE')
+            self.lbl_time.setText(f'⏱ {m}:{s:02d}')
+            self.lbl_time.setStyleSheet(
+                f"color: {T('RED') if remaining < 10 else T('ORANGE')}; background: transparent;")
             self._refresh_display()
             if remaining <= 0 and not self._finished:
                 self._finish()
         else:
             m, s = divmod(int(elapsed_s), 60)
-            self.lbl_time.text = f'⏱ {m}:{s:02d}'
-        self.elapsed = int(elapsed_s)
+            self.lbl_time.setText(f'⏱ {m}:{s:02d}')
         self._update_stats()
 
     def _finish(self):
-        self._finished = True
-        if self._timer_event: self._timer_event.cancel()
+        self._finished = True; self._timer.stop()
         sound_mgr.play('done')
-        if settings_mgr.get('vibration') and HAS_VIBRATOR: vibrate(80)
+        elapsed = max(0.1, time.time() - self.start_time) if self.start_time else 1
+        correct = sum(1 for _, ok in self.typed if ok)
+        wpm = (correct / 5) / (elapsed / 60)
+        acc = (correct / max(1, self.total_keystrokes)) * 100
+        self.mw.stats_mgr.add_stat(
+            self.layout_name, settings_mgr.get('lesson', 'home_row'),
+            wpm, acc, elapsed, self.key_errors)
+        # Force save key stats
+        self.mw.stats_mgr.save()
+        self.mw.results_screen.set_results(
+            wpm, acc, elapsed, correct, self.errors,
+            self.total_keystrokes, self.layout_name, self.best_streak)
+        QTimer.singleShot(500, lambda: self.mw.go_to('results'))
 
-        elapsed = max(0.1, time.time()-self.start_time) if self.start_time else 1
-        correct = sum(1 for _,ok in self.typed if ok)
-        wpm = (correct/5)/(elapsed/60)
-        acc = (correct/max(1,self.total_keystrokes))*100
+    def _go_back(self):
+        self._timer.stop(); self.mw.go_to('menu')
 
-        app = App.get_running_app()
-        app.save_stat(self.layout_name, settings_mgr.get('lesson','home_row'), wpm, acc, elapsed)
-
-        rs = self.manager.get_screen('results')
-        rs.set_results(wpm, acc, elapsed, correct, self.errors, self.total_keystrokes, self.layout_name)
-        Clock.schedule_once(lambda dt: setattr(self.manager, 'current', 'results'), 0.6)
-
-    def _go_back(self, *a):
-        self._stop_listening()
-        if self._timer_event: self._timer_event.cancel()
-        self.manager.current = 'menu'
+    def refresh_theme(self):
+        self.typing_display.setStyleSheet(f"""
+            QTextEdit {{ background-color: {T('CARD')}; color: {T('TXT')};
+            border: none; border-radius: 10px; padding: 12px; }}
+        """)
+        self.keyboard.update(); self.progress.update()
 
 
-class ResultsScreen(Screen):
-    def __init__(self, **kw):
-        super().__init__(**kw)
+class ResultsScreen(QWidget):
+    def __init__(self, main_window, parent=None):
+        super().__init__(parent)
+        self.mw = main_window
+        self._wpm = 0; self._acc = 0; self._elapsed = 0
+        self._correct = 0; self._errors = 0; self._total = 0
+        self._layout = ''; self._best_streak = 0
         self._build_ui()
 
     def _build_ui(self):
-        self.root = BoxLayout(orientation='vertical', padding=dp(24), spacing=dp(12))
-        self.lbl_title = Label(text='🎉  Lesson Complete!', font_size=sp(26),
-                               size_hint_y=None, height=dp(55), color=T('YELLOW'))
-        self.root.add_widget(self.lbl_title)
+        layout = QVBoxLayout(self)
+        layout.setSpacing(12); layout.setContentsMargins(24, 24, 24, 24)
 
-        self.stats_grid = GridLayout(cols=2, spacing=dp(8), size_hint_y=None, height=dp(220))
-        self.root.add_widget(self.stats_grid)
+        self.lbl_title = QLabel('🎉  Lesson Complete!')
+        self.lbl_title.setFont(QFont("Segoe UI", 24, QFont.Bold))
+        self.lbl_title.setAlignment(Qt.AlignCenter)
+        self.lbl_title.setStyleSheet(f"color: {T('YELLOW')}; background: transparent;")
+        layout.addWidget(self.lbl_title)
 
-        self.root.add_widget(Widget(size_hint_y=1))
+        self.stats_grid = QGridLayout()
+        self.stats_grid.setSpacing(8)
+        layout.addLayout(self.stats_grid)
 
-        self.lbl_rating = Label(text='', font_size=sp(20), size_hint_y=None, height=dp(50), color=T('TXT'))
-        self.root.add_widget(self.lbl_rating)
+        layout.addStretch()
 
-        self.lbl_stars = Label(text='', font_size=sp(32), size_hint_y=None, height=dp(50), color=T('YELLOW'))
-        self.root.add_widget(self.lbl_stars)
+        self.lbl_rating = QLabel('')
+        self.lbl_rating.setFont(QFont("Segoe UI", 18, QFont.Bold))
+        self.lbl_rating.setAlignment(Qt.AlignCenter)
+        self.lbl_rating.setStyleSheet(f"color: {T('TXT')}; background: transparent;")
+        layout.addWidget(self.lbl_rating)
 
-        btn_box = BoxLayout(spacing=dp(10), size_hint_y=None, height=btn_h())
-        retry_btn = Button(text='🔄  Try Again', font_size=sp(15), background_normal='',
-                           background_down='', background_color=T('ACCENT'), color=T('TXT'))
-        retry_btn.bind(on_press=self._retry)
-        menu_btn = Button(text='🏠  Menu', font_size=sp(15), background_normal='',
-                          background_down='', background_color=T('CARD2'), color=T('TXT'))
-        menu_btn.bind(on_press=self._menu)
-        btn_box.add_widget(retry_btn); btn_box.add_widget(menu_btn)
-        self.root.add_widget(btn_box)
-        self.add_widget(self.root)
+        self.lbl_stars = QLabel('')
+        self.lbl_stars.setFont(QFont("Segoe UI", 30))
+        self.lbl_stars.setAlignment(Qt.AlignCenter)
+        self.lbl_stars.setStyleSheet(f"color: {T('YELLOW')}; background: transparent;")
+        layout.addWidget(self.lbl_stars)
 
-    def set_results(self, wpm, acc, elapsed, correct, errors, total, layout):
-        self.stats_grid.clear_widgets()
+        # Problem keys
+        self.lbl_problems = QLabel('')
+        self.lbl_problems.setFont(QFont("Segoe UI", 11))
+        self.lbl_problems.setAlignment(Qt.AlignCenter)
+        self.lbl_problems.setStyleSheet(f"color: {T('ORANGE')}; background: transparent;")
+        layout.addWidget(self.lbl_problems)
+
+        btn_box = QHBoxLayout(); btn_box.setSpacing(10)
+        retry_btn = QPushButton('🔄  Try Again')
+        retry_btn.setFixedHeight(48)
+        retry_btn.setStyleSheet(btn_stylesheet('ACCENT', 15, bold=True, text_color='#ffffff'))
+        retry_btn.clicked.connect(self._retry)
+        next_btn = QPushButton('➡️  Next Lesson')
+        next_btn.setFixedHeight(48)
+        next_btn.setStyleSheet(btn_stylesheet('GREEN', 15, bold=True, text_color='#ffffff'))
+        next_btn.clicked.connect(self._next_lesson)
+        menu_btn = QPushButton('🏠  Menu')
+        menu_btn.setFixedHeight(48)
+        menu_btn.setStyleSheet(btn_stylesheet('CARD2', 15))
+        menu_btn.clicked.connect(lambda: self.mw.go_to('menu'))
+        btn_box.addWidget(retry_btn); btn_box.addWidget(next_btn); btn_box.addWidget(menu_btn)
+        layout.addLayout(btn_box)
+
+    def set_results(self, wpm, acc, elapsed, correct, errors, total, layout_name, best_streak=0):
+        self._wpm = wpm; self._acc = acc; self._elapsed = elapsed
+        self._correct = correct; self._errors = errors; self._total = total
+        self._layout = layout_name; self._best_streak = best_streak
+
+        # Clear grid
+        while self.stats_grid.count():
+            item = self.stats_grid.takeAt(0)
+            if item.widget(): item.widget().deleteLater()
+
         stats = [
-            ('⌨️ Layout',     LAYOUTS[layout]['display']),
-            ('⚡ Speed',       f'{int(wpm)} WPM'),
-            ('🎯 Accuracy',   f'{acc:.1f}%'),
-            ('⏱ Time',        f'{int(elapsed//60)}:{int(elapsed%60):02d}'),
-            ('✅ Correct',     str(correct)),
-            ('❌ Errors',      str(errors)),
-            ('📊 Keystrokes',  str(total)),
-            ('📈 Chars/min',   f'{int(correct/max(1,elapsed)*60)}'),
+            ('⌨️ Layout', LAYOUTS[layout_name]['display']),
+            ('⚡ Speed', f'{int(wpm)} WPM'),
+            ('🎯 Accuracy', f'{acc:.1f}%'),
+            ('⏱ Time', f'{int(elapsed // 60)}:{int(elapsed % 60):02d}'),
+            ('✅ Correct', str(correct)),
+            ('❌ Errors', str(errors)),
+            ('🔥 Best Streak', str(best_streak)),
+            ('📊 Keystrokes', str(total)),
+            ('📈 Chars/min', f'{int(correct / max(1, elapsed) * 60)}'),
         ]
-        for label, value in stats:
-            l = Label(text=label, font_size=sp(13), color=T('DIM'), halign='right', valign='middle')
-            l.bind(size=lambda *a,w=l: w.setter('text_size')(w, w.size))
-            v = Label(text=value, font_size=sp(15), color=T('TXT'), bold=True, halign='left', valign='middle')
-            v.bind(size=lambda *a,w=v: w.setter('text_size')(v, v.size))
-            self.stats_grid.add_widget(l); self.stats_grid.add_widget(v)
+        for i, (label, value) in enumerate(stats):
+            l = QLabel(label); l.setFont(QFont("Segoe UI", 12))
+            l.setStyleSheet(f"color: {T('DIM')}; background: transparent;")
+            l.setAlignment(Qt.AlignRight | Qt.AlignVCenter)
+            v = QLabel(value); v.setFont(QFont("Segoe UI", 14, QFont.Bold))
+            # Color code important values
+            color = T('TXT')
+            if label == '⚡ Speed':
+                color = T('GREEN') if wpm >= 30 else T('ORANGE') if wpm >= 15 else T('RED')
+            elif label == '🎯 Accuracy':
+                color = T('GREEN') if acc >= 95 else T('ORANGE') if acc >= 85 else T('RED')
+            v.setStyleSheet(f"color: {color}; background: transparent;")
+            v.setAlignment(Qt.AlignLeft | Qt.AlignVCenter)
+            self.stats_grid.addWidget(l, i, 0)
+            self.stats_grid.addWidget(v, i, 1)
 
         # Star rating
         if acc >= 98 and wpm >= 50:   stars, rating, rc = 5, '🏆 PERFECT! Typing master!', T('YELLOW')
@@ -1000,390 +1416,546 @@ class ResultsScreen(Screen):
         elif acc >= 90:               stars, rating, rc = 3, '👍 Good job!', T('ACCENT')
         elif acc >= 80:               stars, rating, rc = 2, '💪 Keep at it!', T('ORANGE')
         else:                         stars, rating, rc = 1, '📚 Practice more!', T('RED')
-        self.lbl_rating.text = rating; self.lbl_rating.color = rc
-        self.lbl_stars.text = '★' * stars + '☆' * (5-stars)
+        self.lbl_rating.setText(rating)
+        self.lbl_rating.setStyleSheet(f"color: {rc}; background: transparent;")
+        self.lbl_stars.setText('★' * stars + '☆' * (5 - stars))
 
-        # Compare with best
-        app = App.get_running_app()
-        best = app.get_best_stat(layout)
+        # Check if new personal best
+        best = self.mw.stats_mgr.get_best(layout_name)
         if best and best.get('wpm', 0) > 0:
             diff = int(wpm) - int(best.get('wpm', 0))
             if diff > 0:
-                self.lbl_rating.text += f'  (+{diff} WPM vs best!)'
+                self.lbl_rating.setText(rating + f'  🏅 New best! (+{diff} WPM)')
 
-    def _retry(self, *a):
-        app = App.get_running_app()
-        ts = self.manager.get_screen('typing')
-        ts.start_lesson(app.current_layout, settings_mgr.get('lesson','home_row'), app.current_mode)
-        self.manager.current = 'typing'
+        # Show problem keys
+        problem_keys = []
+        for key, errors in sorted(
+            self.mw.stats_mgr.key_stats.items(),
+            key=lambda x: x[1].get('errors', 0), reverse=True
+        )[:3]:
+            if key.startswith(f"{layout_name}:") and errors.get('errors', 0) > 0:
+                k = key.split(':')[-1]
+                total_k = errors.get('total', 1)
+                acc_k = (1 - errors['errors'] / max(1, total_k)) * 100
+                problem_keys.append(f'{k} ({acc_k:.0f}%)')
+        if problem_keys:
+            self.lbl_problems.setText(f'⚠️ Weakest keys: {", ".join(problem_keys)}')
+        else:
+            self.lbl_problems.setText('')
 
-    def _menu(self, *a):
-        self.manager.current = 'menu'
+    def _retry(self):
+        self.mw.typing_screen.start_lesson(
+            self.mw.current_layout, settings_mgr.get('lesson', 'home_row'), self.mw.current_mode)
+        self.mw.go_to('typing')
+
+    def _next_lesson(self):
+        # Advance to the next lesson type
+        lesson_keys = [lt for lt, _, _ in LESSON_TYPES]
+        current = settings_mgr.get('lesson', 'home_row')
+        try:
+            idx = lesson_keys.index(current)
+            next_idx = (idx + 1) % len(lesson_keys)
+        except ValueError:
+            next_idx = 0
+        next_lesson = lesson_keys[next_idx]
+        settings_mgr.set('lesson', next_lesson)
+        self.mw.current_lesson = next_lesson
+        self.mw.typing_screen.start_lesson(
+            self.mw.current_layout, next_lesson, self.mw.current_mode)
+        self.mw.go_to('typing')
+
+    def refresh_theme(self):
+        self.lbl_title.setStyleSheet(f"color: {T('YELLOW')}; background: transparent;")
+        self.lbl_rating.setStyleSheet(f"color: {T('TXT')}; background: transparent;")
+        self.lbl_stars.setStyleSheet(f"color: {T('YELLOW')}; background: transparent;")
+        self.lbl_problems.setStyleSheet(f"color: {T('ORANGE')}; background: transparent;")
 
 
-class StatsScreen(Screen):
-    def __init__(self, **kw):
-        super().__init__(**kw)
-        self._build_ui()
+class StatsScreen(QWidget):
+    def __init__(self, main_window, parent=None):
+        super().__init__(parent)
+        self.mw = main_window; self._build_ui()
 
     def _build_ui(self):
-        self.root = BoxLayout(orientation='vertical', padding=dp(16), spacing=dp(8))
-        header = BoxLayout(size_hint_y=None, height=dp(44))
-        back_btn = Button(text='← Back', size_hint_x=None, width=dp(76),
-                          background_normal='', background_down='', background_color=T('CARD2'), color=T('TXT'), font_size=sp(12))
-        back_btn.bind(on_press=lambda *a: setattr(self.manager, 'current', 'menu'))
-        header.add_widget(back_btn)
-        header.add_widget(Label(text='📊  Your Statistics', font_size=sp(20), color=T('TXT')))
-        self.root.add_widget(header)
+        layout = QVBoxLayout(self)
+        layout.setSpacing(8); layout.setContentsMargins(16, 16, 16, 16)
 
-        # Summary
-        self.summary_box = BoxLayout(size_hint_y=None, height=dp(80), spacing=dp(6))
-        self.root.add_widget(self.summary_box)
+        # Header
+        header = QHBoxLayout()
+        back_btn = QPushButton('← Back')
+        back_btn.setFixedWidth(76)
+        back_btn.setStyleSheet(btn_stylesheet('CARD2', 12))
+        back_btn.clicked.connect(lambda: self.mw.go_to('menu'))
+        header.addWidget(back_btn)
+        title = QLabel('📊  Your Statistics')
+        title.setFont(QFont("Segoe UI", 18, QFont.Bold))
+        title.setStyleSheet(f"color: {T('TXT')}; background: transparent;")
+        header.addWidget(title, 1)
+        layout.addLayout(header)
 
-        self.scroll = ScrollView()
-        self.stats_content = GridLayout(cols=1, spacing=dp(6), size_hint_y=None, padding=dp(4))
-        self.stats_content.bind(minimum_height=self.stats_content.setter('height'))
-        self.scroll.add_widget(self.stats_content)
-        self.root.add_widget(self.scroll)
+        # Summary cards
+        self.summary_layout = QHBoxLayout()
+        self.summary_layout.setSpacing(6)
+        layout.addLayout(self.summary_layout)
 
-        clear_btn = Button(text='🗑  Clear All Stats', size_hint_y=None, height=dp(42),
-                           background_normal='', background_down='', background_color=T('RED'), color=T('TXT'), font_size=sp(12))
-        clear_btn.bind(on_press=self._clear_stats)
-        self.root.add_widget(clear_btn)
-        self.add_widget(self.root)
+        # WPM Chart
+        layout.addWidget(QLabel('📈  WPM Over Time'))
+        self.chart = WpmChart()
+        layout.addWidget(self.chart)
 
-    def on_pre_enter(self, *a):
-        self._refresh()
-
-    def _refresh(self):
-        # Summary
-        self.summary_box.clear_widgets()
-        app = App.get_running_app()
-        stats = app.load_stats()
-
-        if not stats:
-            self.summary_box.add_widget(Label(text='No statistics yet.\nComplete a lesson to see your progress!',
-                                              font_size=sp(13), color=T('DIM')))
-        else:
-            wpms = [s.get('wpm',0) for s in stats]
-            accs = [s.get('acc',0) for s in stats]
-            total_sessions = len(stats)
-            avg_wpm = sum(wpms)/len(wpms)
-            best_wpm = max(wpms)
-            avg_acc = sum(accs)/len(accs)
-            for label, val in [('Sessions', str(total_sessions)), ('Avg WPM', f'{avg_wpm:.0f}'),
-                               ('Best WPM', f'{best_wpm:.0f}'), ('Avg Acc', f'{avg_acc:.1f}%')]:
-                card = BoxLayout(orientation='vertical', padding=dp(4))
-                with card.canvas.before:
-                    Color(*T('CARD'))
-                    bg = RoundedRectangle(pos=card.pos, size=card.size, radius=[dp(6)])
-                card.bind(pos=lambda i,bg=bg: setattr(bg,'pos',i.pos), size=lambda i,bg=bg: setattr(bg,'size',i.size))
-                l = Label(text=label, font_size=sp(9), color=T('DIM'), size_hint_y=0.4)
-                v = Label(text=val, font_size=sp(16), color=T('TXT'), bold=True, size_hint_y=0.6)
-                card.add_widget(l); card.add_widget(v)
-                self.summary_box.add_widget(card)
+        # Layout filter
+        filter_row = QHBoxLayout()
+        filter_row.addWidget(QLabel('Filter by layout:'))
+        self.layout_filter = QComboBox()
+        self.layout_filter.addItem('All Layouts', '')
+        for name, data in LAYOUTS.items():
+            self.layout_filter.addItem(data['display'], name)
+        self.layout_filter.currentIndexChanged.connect(self._refresh)
+        filter_row.addWidget(self.layout_filter, 1)
+        layout.addLayout(filter_row)
 
         # History
-        self.stats_content.clear_widgets()
+        scroll = QScrollArea()
+        scroll.setWidgetResizable(True); scroll.setFrameShape(QFrame.NoFrame)
+        self.history_widget = QWidget()
+        self.history_layout = QVBoxLayout(self.history_widget)
+        self.history_layout.setSpacing(6)
+        self.history_layout.setContentsMargins(4, 4, 4, 4)
+        self.history_layout.addStretch()
+        scroll.setWidget(self.history_widget)
+        layout.addWidget(scroll, 1)
+
+        # Bottom buttons
+        bottom_row = QHBoxLayout()
+        export_btn = QPushButton('📤  Export Stats')
+        export_btn.setFixedHeight(42)
+        export_btn.setStyleSheet(btn_stylesheet('CARD2', 12))
+        export_btn.clicked.connect(self._export_stats)
+        bottom_row.addWidget(export_btn)
+        clear_btn = QPushButton('🗑  Clear All Stats')
+        clear_btn.setFixedHeight(42)
+        clear_btn.setStyleSheet(btn_stylesheet('RED', 12, text_color='#ffffff'))
+        clear_btn.clicked.connect(self._clear_stats)
+        bottom_row.addWidget(clear_btn)
+        layout.addLayout(bottom_row)
+
+    def showEvent(self, event):
+        super().showEvent(event); self._refresh()
+
+    def _refresh(self):
+        # Get filtered stats
+        filter_layout = self.layout_filter.currentData() or ''
+        all_stats = self.mw.stats_mgr.stats
+        if filter_layout:
+            stats = [s for s in all_stats if s.get('layout') == filter_layout]
+        else:
+            stats = all_stats
+
+        # Clear summary
+        while self.summary_layout.count():
+            item = self.summary_layout.takeAt(0)
+            if item.widget(): item.widget().deleteLater()
+
         if not stats:
-            return
+            lbl = QLabel('No statistics yet.\nComplete a lesson to see your progress!')
+            lbl.setFont(QFont("Segoe UI", 12))
+            lbl.setStyleSheet(f"color: {T('DIM')}; background: transparent;")
+            lbl.setAlignment(Qt.AlignCenter)
+            self.summary_layout.addWidget(lbl)
+            self.chart.set_data([])
+        else:
+            wpms = [s.get('wpm', 0) for s in stats]
+            accs = [s.get('acc', 0) for s in stats]
+            total_time = sum(s.get('time', 0) for s in stats)
+            summaries = [
+                ('Sessions', str(len(stats)), 'ACCENT'),
+                ('Avg WPM', f'{sum(wpms)/len(wpms):.0f}', 'GREEN'),
+                ('Best WPM', f'{max(wpms):.0f}', 'YELLOW'),
+                ('Avg Acc', f'{sum(accs)/len(accs):.1f}%', 'ACCENT'),
+                ('Total Time', f'{int(total_time//60)}m', 'ORANGE'),
+            ]
+            for label, val, color_key in summaries:
+                card = QWidget()
+                card.setStyleSheet(card_stylesheet(6))
+                cl = QVBoxLayout(card); cl.setContentsMargins(8, 4, 8, 4)
+                ll = QLabel(label); ll.setFont(QFont("Segoe UI", 9))
+                ll.setStyleSheet(f"color: {T('DIM')}; background: transparent;")
+                ll.setAlignment(Qt.AlignCenter)
+                vl = QLabel(val); vl.setFont(QFont("Segoe UI", 16, QFont.Bold))
+                vl.setStyleSheet(f"color: {T(color_key)}; background: transparent;")
+                vl.setAlignment(Qt.AlignCenter)
+                cl.addWidget(ll); cl.addWidget(vl)
+                self.summary_layout.addWidget(card)
+
+            # Update chart
+            self.chart.set_data(wpms[-30:])
+
+        # History list
+        while self.history_layout.count() > 0:
+            item = self.history_layout.takeAt(0)
+            if item.widget(): item.widget().deleteLater()
 
         for entry in reversed(stats[-30:]):
-            box = BoxLayout(orientation='vertical', size_hint_y=None, height=dp(64), padding=dp(6), spacing=dp(1))
-            with box.canvas.before:
-                Color(*T('CARD'))
-                bg = RoundedRectangle(pos=box.pos, size=box.size, radius=[dp(8)])
-            box.bind(pos=lambda i,bg=bg: setattr(bg,'pos',i.pos), size=lambda i,bg=bg: setattr(bg,'size',i.size))
+            box = QWidget()
+            box.setStyleSheet(card_stylesheet(8))
+            bl = QVBoxLayout(box)
+            bl.setContentsMargins(10, 6, 10, 6)
+            bl.setSpacing(2)
+            layout_disp = LAYOUTS.get(entry.get('layout', ''), {}).get(
+                'display', entry.get('layout', ''))
+            line1 = (f'{layout_disp}  •  '
+                     f'{entry.get("lesson", "").replace("_", " ").title()}  •  '
+                     f'{entry.get("date", "")}')
+            l1 = QLabel(line1)
+            l1.setFont(QFont("Segoe UI", 10))
+            l1.setStyleSheet(f"color: {T('DIM')}; background: transparent;")
 
-            layout_disp = LAYOUTS.get(entry.get('layout',''),{}).get('display', entry.get('layout',''))
-            line1 = f'{layout_disp}  •  {entry.get("lesson","").replace("_"," ").title()}  •  {entry.get("date","")}'
-            wpm_val = entry.get('wpm',0); acc_val = entry.get('acc',0)
-            line2 = f'WPM: {int(wpm_val)}   |   Accuracy: {acc_val:.1f}%   |   Time: {int(entry.get("time",0)//60)}:{int(entry.get("time",0)%60):02d}'
+            wpm_val = entry.get('wpm', 0)
+            acc_val = entry.get('acc', 0)
+            wpm_color = T('GREEN') if wpm_val >= 30 else T('ORANGE') if wpm_val >= 15 else T('RED')
+            acc_color = T('GREEN') if acc_val >= 95 else T('ORANGE') if acc_val >= 85 else T('RED')
 
-            l1 = Label(text=line1, font_size=sp(9), color=T('DIM'), halign='left', valign='middle', size_hint_y=None, height=dp(18))
-            l1.bind(size=lambda *a,w=l1: w.setter('text_size')(w, w.size))
+            line2 = f'⚡ {int(wpm_val)} WPM   🎯 {acc_val:.1f}%   ⏱ {int(entry.get("time",0))}s'
+            l2 = QLabel(line2)
+            l2.setFont(QFont("Segoe UI", 12, QFont.Bold))
+            l2.setStyleSheet(f"color: {wpm_color}; background: transparent;")
 
-            # WPM bar
-            bar_row = BoxLayout(size_hint_y=None, height=dp(20), spacing=dp(4))
-            l2 = Label(text=f'{int(wpm_val)}', font_size=sp(11), color=T('GREEN') if wpm_val>=30 else T('ORANGE'),
-                       size_hint_x=None, width=dp(32), halign='right', valign='middle')
-            l2.bind(size=lambda *a,w=l2: w.setter('text_size')(w, w.size))
-            bar = StatBar(value=wpm_val, max_val=80, color_key='GREEN')
-            bar_row.add_widget(l2); bar_row.add_widget(bar)
+            bl.addWidget(l1); bl.addWidget(l2)
+            self.history_layout.addWidget(box)
 
-            l3 = Label(text=line2, font_size=sp(10), color=T('TXT'), halign='left', valign='middle', size_hint_y=None, height=dp(18))
-            l3.bind(size=lambda *a,w=l3: w.setter('text_size')(w, w.size))
+        # Re-add stretch at end
+        self.history_layout.addStretch()
 
-            box.add_widget(l1); box.add_widget(bar_row); box.add_widget(l3)
-            self.stats_content.add_widget(box)
+    def _clear_stats(self):
+        self.mw.stats_mgr.clear(); self._refresh()
 
-    def _clear_stats(self, *a):
-        App.get_running_app().clear_stats()
+    def _export_stats(self):
+        path = os.path.join(DATA_DIR, 'exported_stats.json')
+        try:
+            with open(path, 'w') as f:
+                json.dump({
+                    'sessions': self.mw.stats_mgr.stats,
+                    'key_stats': self.mw.stats_mgr.key_stats,
+                    'exported': datetime.now().strftime('%Y-%m-%d %H:%M'),
+                }, f, indent=2)
+            # Show brief confirmation
+            self.mw.statusBar().showMessage(f'Stats exported to {path}', 3000)
+        except Exception as e:
+            self.mw.statusBar().showMessage(f'Export failed: {e}', 3000)
+
+    def refresh_theme(self):
         self._refresh()
 
 
-class SettingsScreen(Screen):
-    def __init__(self, **kw):
-        super().__init__(**kw)
-        self._build_ui()
+class SettingsScreen(QWidget):
+    def __init__(self, main_window, parent=None):
+        super().__init__(parent)
+        self.mw = main_window; self._build_ui()
 
     def _build_ui(self):
-        self.root = BoxLayout(orientation='vertical', padding=dp(16), spacing=dp(10))
-        header = BoxLayout(size_hint_y=None, height=dp(44))
-        back_btn = Button(text='← Back', size_hint_x=None, width=dp(76),
-                          background_normal='', background_down='', background_color=T('CARD2'), color=T('TXT'), font_size=sp(12))
-        back_btn.bind(on_press=lambda *a: setattr(self.manager, 'current', 'menu'))
-        header.add_widget(back_btn)
-        header.add_widget(Label(text='⚙️  Settings', font_size=sp(20), color=T('TXT')))
-        self.root.add_widget(header)
+        layout = QVBoxLayout(self)
+        layout.setSpacing(12); layout.setContentsMargins(16, 16, 16, 16)
 
-        scroll = ScrollView()
-        content = BoxLayout(orientation='vertical', size_hint_y=None, spacing=dp(10))
-        content.bind(minimum_height=content.setter('height'))
+        # Header
+        header = QHBoxLayout()
+        back_btn = QPushButton('← Back')
+        back_btn.setFixedWidth(76)
+        back_btn.setStyleSheet(btn_stylesheet('CARD2', 12))
+        back_btn.clicked.connect(lambda: self.mw.go_to('menu'))
+        header.addWidget(back_btn)
+        title = QLabel('⚙️  Settings')
+        title.setFont(QFont("Segoe UI", 18, QFont.Bold))
+        title.setStyleSheet(f"color: {T('TXT')}; background: transparent;")
+        header.addWidget(title, 1)
+        layout.addLayout(header)
 
-        # Theme
-        content.add_widget(self._section('Theme'))
-        self._theme_btns = {}
-        theme_grid = GridLayout(cols=2, spacing=dp(6), size_hint_y=None, height=dp(42)*2+dp(6))
-        cur_theme = settings_mgr.get('theme', 'dark')
-        theme_names = {'dark':'🌙 Dark','midnight':'🌌 Midnight','ocean':'🌊 Ocean','warm':'🔥 Warm'}
-        for tname, tdisp in theme_names.items():
-            b = ToggleButton(text=tdisp, group='theme', font_size=sp(12),
-                             background_normal='', background_down='', background_color=T('CARD2'), color=T('TXT'))
-            if tname == cur_theme: b.state = 'down'; b.background_color = T('ACCENT')
-            b.bind(state=lambda s,v,t=tname: self._pick_theme(t,v))
-            b.bind(state=self._style_toggle)
-            self._theme_btns[tname] = b
-            theme_grid.add_widget(b)
-        content.add_widget(theme_grid)
+        # Theme selection
+        theme_section = QLabel('🎨  Theme')
+        theme_section.setFont(QFont("Segoe UI", 13, QFont.Bold))
+        theme_section.setStyleSheet(f"color: {T('ACCENT')}; background: transparent;")
+        layout.addWidget(theme_section)
+
+        theme_grid = QGridLayout(); theme_grid.setSpacing(6)
+        self._theme_btns = {}; self._theme_group = QButtonGroup(self)
+        current_theme = settings_mgr.get('theme', 'dark')
+        for i, (tname, tdisplay) in enumerate(THEME_DISPLAY.items()):
+            b = QPushButton(tdisplay)
+            b.setCheckable(True); b.setFixedHeight(42)
+            b.setChecked(tname == current_theme)
+            b.setStyleSheet(toggle_stylesheet(tname == current_theme))
+            self._theme_btns[tname] = b; self._theme_group.addButton(b)
+            theme_grid.addWidget(b, i // 3, i % 3)
+        self._theme_group.idToggled.connect(self._on_theme_toggle)
+        layout.addLayout(theme_grid)
+
+        layout.addSpacing(8)
 
         # Sound
-        content.add_widget(self._section('Sound & Feedback'))
-        sound_row = BoxLayout(size_hint_y=None, height=dp(42), spacing=dp(8))
-        self._sound_btn = ToggleButton(
-            text='🔊 Sound: ON' if settings_mgr.get('sound',True) else '🔇 Sound: OFF',
-            group='sound', font_size=sp(13),
-            background_normal='', background_down='', background_color=T('ACCENT') if settings_mgr.get('sound',True) else T('CARD2'),
-            color=T('TXT'))
-        self._sound_btn.bind(on_press=self._toggle_sound)
-        sound_row.add_widget(self._sound_btn)
+        sound_section = QLabel('🔊  Audio')
+        sound_section.setFont(QFont("Segoe UI", 13, QFont.Bold))
+        sound_section.setStyleSheet(f"color: {T('ACCENT')}; background: transparent;")
+        layout.addWidget(sound_section)
 
-        self._vibrate_btn = ToggleButton(
-            text='📳 Vibrate: ON' if settings_mgr.get('vibration',True) else '📴 Vibrate: OFF',
-            group='vibrate', font_size=sp(13),
-            background_normal='', background_down='',
-            background_color=T('ACCENT') if settings_mgr.get('vibration',True) else T('CARD2'),
-            color=T('TXT'))
-        self._vibrate_btn.bind(on_press=self._toggle_vibrate)
-        if not HAS_VIBRATOR:
-            self._vibrate_btn.disabled = True
-            self._vibrate_btn.text = '📳 Vibrate: N/A'
-        sound_row.add_widget(self._vibrate_btn)
-        content.add_widget(sound_row)
+        self.cb_sound = QCheckBox('  Enable sound effects')
+        self.cb_sound.setChecked(settings_mgr.get('sound', True))
+        self.cb_sound.toggled.connect(lambda v: settings_mgr.set('sound', v))
+        layout.addWidget(self.cb_sound)
+
+        layout.addSpacing(8)
+
+        # Display options
+        display_section = QLabel('🖥️  Display')
+        display_section.setFont(QFont("Segoe UI", 13, QFont.Bold))
+        display_section.setStyleSheet(f"color: {T('ACCENT')}; background: transparent;")
+        layout.addWidget(display_section)
+
+        self.cb_keyboard = QCheckBox('  Show visual keyboard during typing')
+        self.cb_keyboard.setChecked(settings_mgr.get('show_keyboard', True))
+        self.cb_keyboard.toggled.connect(lambda v: settings_mgr.set('show_keyboard', v))
+        layout.addWidget(self.cb_keyboard)
+
+        self.cb_finger = QCheckBox('  Show finger hints')
+        self.cb_finger.setChecked(settings_mgr.get('show_finger_hints', True))
+        self.cb_finger.toggled.connect(lambda v: settings_mgr.set('show_finger_hints', v))
+        layout.addWidget(self.cb_finger)
+
+        layout.addSpacing(8)
+
+        # Key heatmap section
+        heatmap_section = QLabel('🗺️  Key Heatmap')
+        heatmap_section.setFont(QFont("Segoe UI", 13, QFont.Bold))
+        heatmap_section.setStyleSheet(f"color: {T('ACCENT')}; background: transparent;")
+        layout.addWidget(heatmap_section)
+
+        heatmap_desc = QLabel(
+            'The visual keyboard can show a heatmap of your accuracy per key.\n'
+            'Green = high accuracy, Red = needs practice.')
+        heatmap_desc.setFont(QFont("Segoe UI", 10))
+        heatmap_desc.setStyleSheet(f"color: {T('DIM')}; background: transparent;")
+        layout.addWidget(heatmap_desc)
+
+        # Show heatmap preview keyboard
+        self.heatmap_keyboard = VisualKeyboard()
+        self.heatmap_keyboard.set_layout(settings_mgr.get('layout', 'QWERTY'))
+        self.heatmap_keyboard.show_heatmap = True
+        self.heatmap_keyboard.setFixedHeight(200)
+        layout.addWidget(self.heatmap_keyboard)
+
+        layout.addStretch()
 
         # About
-        content.add_widget(self._section('About'))
-        about = Label(text='Keyboard Trainer v2.0\n\nLearn to type fast and accurately\non QWERTY, AZERTY, DVORAK & Colemak.\n\n'
-                           'Works on Desktop and Android.\nTap the on-screen keyboard or\ntype on a physical keyboard.',
-                      font_size=sp(12), color=T('DIM'), halign='left', valign='top',
-                      size_hint_y=None, height=dp(140))
-        about.bind(size=lambda *a,w=about: w.setter('text_size')(w, w.size))
-        content.add_widget(about)
+        about = QLabel(
+            'Keyboard Trainer v2.0  •  Built with PySide6\n'
+            'Data stored in: ' + DATA_DIR)
+        about.setFont(QFont("Segoe UI", 9))
+        about.setStyleSheet(f"color: {T('DIM')}; background: transparent;")
+        about.setAlignment(Qt.AlignCenter)
+        layout.addWidget(about)
 
-        scroll.add_widget(content)
-        self.root.add_widget(scroll)
-        self.add_widget(self.root)
+    def _on_theme_toggle(self, btn, checked):
+        if not checked: return
+        for tname, b in self._theme_btns.items():
+            sel = b == btn
+            b.setStyleSheet(toggle_stylesheet(sel))
+            if sel:
+                settings_mgr.set('theme', tname)
+                self.mw.apply_theme()
 
-    def _section(self, text):
-        l = Label(text=text, font_size=sp(14), size_hint_y=None, height=dp(28),
-                  halign='left', valign='middle', color=T('ACCENT'))
-        l.bind(size=lambda *a: l.setter('text_size')(l, l.size))
-        return l
-
-    def _style_toggle(self, btn, val):
-        btn.background_color = T('ACCENT') if val == 'down' else T('CARD2')
-
-    def _pick_theme(self, tname, state):
-        if state == 'down':
-            settings_mgr.set('theme', tname)
-            # Update window background
-            Window.clearcolor = T('BG')
-
-    def _toggle_sound(self, *a):
-        new_val = not settings_mgr.get('sound', True)
-        settings_mgr.set('sound', new_val)
-        self._sound_btn.text = '🔊 Sound: ON' if new_val else '🔇 Sound: OFF'
-        self._sound_btn.background_color = T('ACCENT') if new_val else T('CARD2')
-
-    def _toggle_vibrate(self, *a):
-        new_val = not settings_mgr.get('vibration', True)
-        settings_mgr.set('vibration', new_val)
-        self._vibrate_btn.text = '📳 Vibrate: ON' if new_val else '📴 Vibrate: OFF'
-        self._vibrate_btn.background_color = T('ACCENT') if new_val else T('CARD2')
+    def refresh_theme(self):
+        for tname, b in self._theme_btns.items():
+            b.setStyleSheet(toggle_stylesheet(b.isChecked()))
+        self.heatmap_keyboard.update()
 
 
-class CustomTextScreen(Screen):
-    def __init__(self, **kw):
-        super().__init__(**kw)
-        self._build_ui()
+class CustomTextScreen(QWidget):
+    def __init__(self, main_window, parent=None):
+        super().__init__(parent)
+        self.mw = main_window; self._build_ui()
 
     def _build_ui(self):
-        self.root = BoxLayout(orientation='vertical', padding=dp(16), spacing=dp(10))
-        header = BoxLayout(size_hint_y=None, height=dp(44))
-        back_btn = Button(text='← Back', size_hint_x=None, width=dp(76),
-                          background_normal='', background_down='', background_color=T('CARD2'), color=T('TXT'), font_size=sp(12))
-        back_btn.bind(on_press=lambda *a: setattr(self.manager, 'current', 'menu'))
-        header.add_widget(back_btn)
-        header.add_widget(Label(text='✏️  Custom Text', font_size=sp(20), color=T('TXT')))
-        self.root.add_widget(header)
+        layout = QVBoxLayout(self)
+        layout.setSpacing(12); layout.setContentsMargins(16, 16, 16, 16)
 
-        info = Label(text='Enter any text below to practice typing it.\nYou can paste from clipboard or type your own.',
-                     font_size=sp(12), color=T('DIM'), size_hint_y=None, height=dp(44), halign='left', valign='middle')
-        info.bind(size=lambda *a,w=info: w.setter('text_size')(w, w.size))
-        self.root.add_widget(info)
+        # Header
+        header = QHBoxLayout()
+        back_btn = QPushButton('← Back')
+        back_btn.setFixedWidth(76)
+        back_btn.setStyleSheet(btn_stylesheet('CARD2', 12))
+        back_btn.clicked.connect(lambda: self.mw.go_to('menu'))
+        header.addWidget(back_btn)
+        title = QLabel('✏️  Custom Text Practice')
+        title.setFont(QFont("Segoe UI", 18, QFont.Bold))
+        title.setStyleSheet(f"color: {T('TXT')}; background: transparent;")
+        header.addWidget(title, 1)
+        layout.addLayout(header)
 
-        self.text_input = TextInput(
-            hint_text='Type or paste your practice text here...',
-            multiline=True, font_size=sp(16),
-            size_hint_y=None, height=dp(200),
-            background_color=T('CARD2'), foreground_color=T('TXT'),
-            cursor_color=T('ACCENT'), hint_text_color=T('DIM'))
-        self.root.add_widget(self.text_input)
+        desc = QLabel('Enter any text below to practice typing it. Great for practicing specific passages!')
+        desc.setFont(QFont("Segoe UI", 11))
+        desc.setStyleSheet(f"color: {T('DIM')}; background: transparent;")
+        desc.setWordWrap(True)
+        layout.addWidget(desc)
+
+        # Layout selector
+        layout_row = QHBoxLayout()
+        layout_row.addWidget(QLabel('Layout:'))
+        self.layout_combo = QComboBox()
+        for name, data in LAYOUTS.items():
+            self.layout_combo.addItem(data['display'], name)
+        # Set current layout
+        idx = list(LAYOUTS.keys()).index(settings_mgr.get('layout', 'QWERTY'))
+        self.layout_combo.setCurrentIndex(idx)
+        layout_row.addWidget(self.layout_combo, 1)
+        layout.addLayout(layout_row)
+
+        # Text input
+        self.text_edit = QPlainTextEdit()
+        self.text_edit.setPlaceholderText(
+            'Type or paste your practice text here...\n\n'
+            'Examples:\n'
+            '• The quick brown fox jumps over the lazy dog.\n'
+            '• A paragraph from your favorite book.\n'
+            '• Code snippets you want to practice typing.'
+        )
+        self.text_edit.setFont(QFont("Consolas", 13))
+        self.text_edit.setMinimumHeight(200)
+        layout.addWidget(self.text_edit, 1)
 
         # Preset texts
-        content.add_widget = None  # placeholder logic removed
-        self.root.add_widget(Label(text='Quick Presets:', font_size=sp(12), color=T('ACCENT'),
-                                   size_hint_y=None, height=dp(24), halign='left'))
-        preset_row = BoxLayout(size_hint_y=None, height=dp(42), spacing=dp(6))
-        for pname, ptext in [('Pangram','The quick brown fox jumps over the lazy dog.'),
-                             ('Code','def hello_world(): print("Hello, World!")'),
-                             ('Numbers','1 2 3 4 5 6 7 8 9 0')]:
-            b = Button(text=pname, font_size=sp(11), background_normal='', background_down='',
-                       background_color=T('CARD3'), color=T('TXT'))
-            b.bind(on_press=lambda *a, t=ptext: self._set_preset(t))
-            preset_row.add_widget(b)
-        self.root.add_widget(preset_row)
+        preset_row = QHBoxLayout()
+        preset_label = QLabel('Quick fill:')
+        preset_label.setStyleSheet(f"color: {T('DIM')}; background: transparent;")
+        preset_row.addWidget(preset_label)
+        presets = [
+            ('Pangram', 'The quick brown fox jumps over the lazy dog.'),
+            ('Code', 'def hello_world():\n    print("Hello, World!")\n    return True'),
+            ('Numbers', '0123456789 +-*/= () [] {} <> @#$%&'),
+            ('Article', 'In a world increasingly driven by technology, the ability to type '
+                        'quickly and accurately has become an essential skill for professionals '
+                        'and students alike.'),
+        ]
+        for pname, ptext in presets:
+            pb = QPushButton(pname)
+            pb.setFixedHeight(32)
+            pb.setStyleSheet(btn_stylesheet('CARD3', 10))
+            pb.clicked.connect(lambda _, t=ptext: self.text_edit.setPlainText(t))
+            preset_row.addWidget(pb)
+        layout.addLayout(preset_row)
 
-        self.root.add_widget(Widget(size_hint_y=1))
+        # Character count
+        self.lbl_count = QLabel('0 characters')
+        self.lbl_count.setFont(QFont("Segoe UI", 10))
+        self.lbl_count.setStyleSheet(f"color: {T('DIM')}; background: transparent;")
+        self.text_edit.textChanged.connect(
+            lambda: self.lbl_count.setText(f'{len(self.text_edit.toPlainText())} characters'))
+        layout.addWidget(self.lbl_count)
 
-        start_btn = Button(text='▶  Start Practice', font_size=sp(18), size_hint_y=None, height=btn_h(),
-                           background_normal='', background_down='', background_color=T('ACCENT'), color=T('TXT'))
-        start_btn.bind(on_press=self._start)
-        self.root.add_widget(start_btn)
-        self.add_widget(self.root)
+        # Start button
+        start_btn = QPushButton('▶  Start Custom Practice')
+        start_btn.setFixedHeight(52)
+        start_btn.setStyleSheet(btn_stylesheet('ACCENT', 16, bold=True, text_color='#ffffff'))
+        start_btn.clicked.connect(self._start)
+        layout.addWidget(start_btn)
 
-    def _set_preset(self, text):
-        self.text_input.text = text
-
-    def _start(self, *a):
-        text = self.text_input.text.strip()
+    def _start(self):
+        text = self.text_edit.toPlainText().strip()
         if not text:
-            text = 'The quick brown fox jumps over the lazy dog.'
-        app = App.get_running_app()
-        app.current_layout = settings_mgr.get('layout', 'QWERTY')
-        app.current_lesson = 'custom'
-        app.current_mode = 'completion'
-        ts = self.manager.get_screen('typing')
-        ts.start_lesson(app.current_layout, 'custom', 'completion', custom_text=text)
-        self.manager.current = 'typing'
+            self.lbl_count.setStyleSheet(f"color: {T('RED')}; background: transparent;")
+            self.lbl_count.setText('⚠️ Please enter some text first!')
+            return
+        layout_name = self.layout_combo.currentData() or 'QWERTY'
+        self.mw.current_layout = layout_name
+        self.mw.current_lesson = 'custom'
+        self.mw.current_mode = 'completion'
+        self.mw.typing_screen.start_lesson(layout_name, 'custom', 'completion', custom_text=text)
+        self.mw.go_to('typing')
 
-
-# ─── App ──────────────────────────────────────────────────────────────────────
-
-class KeyboardTrainerApp(App):
-    current_layout = 'QWERTY'
-    current_lesson = 'home_row'
-    current_mode = 'completion'
-    stats_file = 'typing_stats.json'
-
-    def build(self):
-        # Initialize settings and sounds with proper data directory
-        data_dir = self.user_data_dir
-        os.makedirs(data_dir, exist_ok=True)
-        settings_mgr.init(data_dir)
-        sound_mgr.init(data_dir)
-
-        # Set theme background
-        Window.clearcolor = T('BG')
-
-        # Desktop window size
-        if not IS_MOBILE:
-            Window.size = (960, 720)
-            Window.minimum_width = 640
-            Window.minimum_height = 520
-
-        # Android back button
-        Window.bind(on_keyboard=self._on_global_key)
-
-        self.stats_file = os.path.join(data_dir, self.stats_file)
-
-        sm = ScreenManager(transition=SlideTransition(duration=0.25))
-        sm.add_widget(MenuScreen(name='menu'))
-        sm.add_widget(TypingScreen(name='typing'))
-        sm.add_widget(ResultsScreen(name='results'))
-        sm.add_widget(StatsScreen(name='stats'))
-        sm.add_widget(SettingsScreen(name='settings'))
-        sm.add_widget(CustomTextScreen(name='custom'))
-        return sm
-
-    def _on_global_key(self, window, key, *args):
-        """Handle Android back button and Escape key globally."""
-        if key == 27:  # Android back or Escape
-            sm = self.root
-            if sm.current == 'typing':
-                sm.get_screen('typing')._go_back()
-                return True
-            elif sm.current in ('results', 'stats', 'settings', 'custom'):
-                sm.current = 'menu'
-                return True
-            elif sm.current == 'menu':
-                return True  # Consume to prevent app exit
-        return False
-
-    def on_pause(self):
-        """Android: save state when app is paused."""
-        settings_mgr.save()
-        return True
-
-    def on_resume(self):
-        """Android: restore when app is resumed."""
+    def refresh_theme(self):
         pass
 
-    def save_stat(self, layout, lesson, wpm, acc, time_s):
-        stats = self.load_stats()
-        stats.append({
-            'layout': layout, 'lesson': lesson,
-            'wpm': wpm, 'acc': acc, 'time': time_s,
-            'date': time.strftime('%Y-%m-%d %H:%M')
-        })
-        # Keep last 200 entries
-        if len(stats) > 200:
-            stats = stats[-200:]
-        try:
-            with open(self.stats_file, 'w') as f:
-                json.dump(stats, f)
-        except: pass
 
-    def load_stats(self):
-        if os.path.exists(self.stats_file):
-            try:
-                with open(self.stats_file, 'r') as f:
-                    return json.load(f)
-            except: return []
-        return []
+# ─── Main Window ──────────────────────────────────────────────────────────────
 
-    def clear_stats(self):
-        try:
-            if os.path.exists(self.stats_file):
-                os.remove(self.stats_file)
-        except: pass
+class MainWindow(QMainWindow):
+    def __init__(self):
+        super().__init__()
+        self.setWindowTitle('Keyboard Trainer')
+        self.setMinimumSize(720, 720)
+        self.resize(780, 800)
+        self.current_layout = 'QWERTY'
+        self.current_lesson = 'home_row'
+        self.current_mode = 'completion'
 
-    def get_best_stat(self, layout):
-        stats = self.load_stats()
-        layout_stats = [s for s in stats if s.get('layout') == layout]
-        if not layout_stats: return None
-        return max(layout_stats, key=lambda s: s.get('wpm', 0))
+        # Initialize managers
+        self.stats_mgr = StatsManager(DATA_DIR)
+        settings_mgr.init(DATA_DIR)
+        sound_mgr.init(DATA_DIR)
+
+        # Stacked widget
+        self.stack = QStackedWidget()
+        self.setCentralWidget(self.stack)
+
+        # Create screens
+        self.menu_screen = MenuScreen(self)
+        self.typing_screen = TypingScreen(self)
+        self.results_screen = ResultsScreen(self)
+        self.stats_screen = StatsScreen(self)
+        self.settings_screen = SettingsScreen(self)
+        self.custom_screen = CustomTextScreen(self)
+
+        self.stack.addWidget(self.menu_screen)      # 0
+        self.stack.addWidget(self.typing_screen)     # 1
+        self.stack.addWidget(self.results_screen)    # 2
+        self.stack.addWidget(self.stats_screen)      # 3
+        self.stack.addWidget(self.settings_screen)   # 4
+        self.stack.addWidget(self.custom_screen)     # 5
+
+        self._screen_map = {
+            'menu': 0, 'typing': 1, 'results': 2,
+            'stats': 3, 'settings': 4, 'custom': 5,
+        }
+
+        self.apply_theme()
+
+    def go_to(self, name):
+        idx = self._screen_map.get(name, 0)
+        self.stack.setCurrentIndex(idx)
+        if name == 'typing':
+            self.typing_screen.setFocus()
+        elif name == 'menu':
+            self.menu_screen.refresh_theme()
+
+    def apply_theme(self):
+        self.setStyleSheet(get_app_stylesheet())
+        # Refresh all screens
+        for screen in [self.menu_screen, self.typing_screen, self.results_screen,
+                       self.stats_screen, self.settings_screen, self.custom_screen]:
+            if hasattr(screen, 'refresh_theme'):
+                screen.refresh_theme()
+
+
+# ─── Entry Point ──────────────────────────────────────────────────────────────
+
+def main():
+    app = QApplication(sys.argv)
+    app.setStyle('Fusion')
+
+    # Set default palette for better base styling
+    palette = QPalette()
+    palette.setColor(QPalette.Window, T_color('BG'))
+    palette.setColor(QPalette.WindowText, T_color('TXT'))
+    palette.setColor(QPalette.Base, T_color('CARD'))
+    palette.setColor(QPalette.AlternateBase, T_color('CARD2'))
+    palette.setColor(QPalette.Text, T_color('TXT'))
+    palette.setColor(QPalette.Button, T_color('CARD2'))
+    palette.setColor(QPalette.ButtonText, T_color('TXT'))
+    palette.setColor(QPalette.Highlight, T_color('ACCENT'))
+    palette.setColor(QPalette.HighlightedText, QColor(255, 255, 255))
+    app.setPalette(palette)
+
+    window = MainWindow()
+    window.show()
+    sys.exit(app.exec())
 
 
 if __name__ == '__main__':
-    KeyboardTrainerApp().run()
+    main()
